@@ -151,12 +151,27 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
     save_chat_history(st.session_state.current_chat, st.session_state.messages)
-    
+
     # 2. Έξυπνη απόφαση για Αναζήτηση στο Internet (Routing)
     router_prompt = (
         f"Ανάλυσε την ερώτηση του χρήστη: '{user_input}'. "
-        "Χρειάζεται πρόσφατες πληροφορίες, γεγονότα, νέα, live δεδομένα ή αναζήτηση στο internet για να απαντηθεί σωστά; "
-        "Απάντησε ΑΥΣΤΗΡΑ με μία μόνο λέξη: YES ή NO."
+        "Αν η ερώτηση αφορά συγκεκριμένα προϊόντα, μοντέλα τεχνολογίας (π.χ. Samsung S26, iPhone, GPUs), "
+        "τρέχοντα γεγονότα, πρόσφατες ειδήσεις, ή πληροφορίες που μπορεί να άλλαξαν πρόσφατα, "
+        "απάντησε ΑΥΣΤΗΡΑ με τη λέξη YES. "
+        "Αν είναι μια γενική ερώτηση, κώδικας, ή σενάριο, απάντησε NO. "
+        "Απάντησε με μία μόνο λέξη: YES ή NO."
+    )
+    
+    try:
+        route_check = client.chat.completions.create(
+            model="groq/compound-mini",
+            messages=[{"role": "user", "content": router_prompt}],
+            temperature=0.0
+        )
+        decision = route_check.choices[0].message.content.strip().upper()
+    except Exception:
+        decision = "YES" # Σε περίπτωση σφάλματος, επιλέγουμε Search για ασφάλεια
+        
     )
     
     try:
