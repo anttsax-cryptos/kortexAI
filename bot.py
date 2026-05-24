@@ -55,7 +55,7 @@ def search_web(query, max_results=3):
 
 # --- CONFIGURATION ΣΕΛΙΔΑΣ ---
 st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
-st.title("🤖 StrictexAI Multi-Personality Bot")
+st.title("🤖 StrictexAI ChatBot")
 
 # Ορισμός Προσωπικοτήτων
 personalities = {
