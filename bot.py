@@ -142,10 +142,11 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0]  # Διαβάζουμε σωστά το πρώτο στοιχείο της λίστας
+                        user_data = records[0]  # Διαβάζουμε το πρώτο στοιχείο της λίστας
                         stored_password = user_data.get("password")
                         
-                        if Hasher.verify_password(login_password, stored_password):
+                        # Διορθωμένη μέθοδος ελέγχου κωδικού (check_pw)
+                        if Hasher.check_pw(login_password, stored_password):
                             st.session_state["authenticated"] = True
                             st.session_state["username"] = login_email
                             st.success("Successful Login!")
@@ -178,7 +179,8 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     if existing_records and len(existing_records) > 0:
                         st.error("❌ Αυτό το email χρησιμοποιείται ήδη.")
                     else:
-                        hashed_password = Hasher.hash_password(new_password)
+                        # Διορθωμένη μέθοδος κρυπτογράφησης (hash)
+                        hashed_password = Hasher.hash(new_password)
                         supabase.table("app_users").insert({
                             "email": new_email,
                             "password": hashed_password
@@ -208,7 +210,3 @@ with st.sidebar:
         st.rerun()
         
     st.divider()
-    st.header("💬 Chat History")
-    
-    saved_chats = get_all_chats(current_user)
-    
