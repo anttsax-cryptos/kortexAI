@@ -39,8 +39,8 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (Ελληνική & Αγγλική) ---
-def search_wikipedia(query, max_results=3):
+# --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΦΙΛΤΡΟ ΜΕΓΕΘΟΥΣ) ---
+def search_wikipedia(query, max_results=2):
     context_list = []
     formatted_query = urllib.parse.quote_plus(query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
@@ -51,13 +51,19 @@ def search_wikipedia(query, max_results=3):
         response = requests.get(url_el, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            if len(data) >= 4 and data[1]:  # Αν υπάρχουν αποτελέσματα
+            # Η Wikipedia επιστρέφει: [query, [titles], [descriptions], [urls]]
+            if len(data) >= 4 and data[1]:  
                 for i in range(len(data[1])):
-                    context_list.append(f"Τίτλος: {data[1][i]}\nLink: {data[3][i]}\nΠληροφορία: {data[2][i]}")
+                    title = data[1][i]
+                    snippet = data[2][i] if i < len(data[2]) else ""
+                    # Κόβουμε το κείμενο αν είναι πολύ μεγάλο για ασφάλεια
+                    if len(snippet) > 500:
+                        snippet = snippet[:500] + "..."
+                    context_list.append(f"Τίτλος: {title}\nΠληροφορία: {snippet}")
     except Exception:
         pass
 
-    # 2. Αν δεν βρέθηκε τίποτα στα ελληνικά, δοκιμή στην Αγγλική Wikipedia
+    # 2. Αν δεν βρέθηκε τίποτα, δοκιμή στην Αγγλική Wikipedia
     if not context_list:
         try:
             url_en = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
@@ -66,7 +72,11 @@ def search_wikipedia(query, max_results=3):
                 data = response.json()
                 if len(data) >= 4 and data[1]:
                     for i in range(len(data[1])):
-                        context_list.append(f"Title: {data[1][i]}\nLink: {data[3][i]}\nInformation: {data[2][i]}")
+                        title = data[1][i]
+                        snippet = data[2][i] if i < len(data[2]) else ""
+                        if len(snippet) > 500:
+                            snippet = snippet[:500] + "..."
+                        context_list.append(f"Title: {title}\nInformation: {snippet}")
         except Exception:
             pass
 
@@ -173,7 +183,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
     # 2. Έξυπνη απόφαση για Αναζήτηση (Routing)
     router_prompt = (
         f"Ανάλυσε την ερώτηση του χρήστη: '{user_input}'. "
-        "Αν η ερώτηση αφορά ιστορικά γεγονότα, πρόσωπα, επιστήμη, γεωγραφία, ορισμούς, "
+        "Αν η ερώτηση αφορά συγκεκριμένα ιστορικά γεγονότα, πρόσωπα, επιστήμη, γεωγραφία, ορισμούς, "
         "ή εγκυκλοπαιδικές γνώσεις που χρειάζονται επιβεβαίωση, απάντησε ΑΥΣΤΗΡΑ YES. "
         "Αν είναι απλή κουβέντα, κώδικας ή προσωπική γνώμη, απάντησε NO. "
         "Απάντησε με μία μόνο λέξη: YES ή NO."
@@ -195,7 +205,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         with st.spinner("🔍 Αναζήτηση στην Wikipedia..."):
             results = search_wikipedia(user_input)
             if results:
-                search_context = f"\n\n[Πληροφορίες από την Wikipedia]:\n{results}\n\nΧρησιμοποίησε τα παραπάνω εγκυκλοπαιδικά δεδομένα για να εμπλουτίσεις την απάντησή σου."
+                search_context = f"\n\n[Πληροφορίες από την Wikipedia]:\n{results}\n\nΧρησιμοποίησε τα παραπάνω δεδομένα για να απαντήσεις."
 
     # 3. Κατασκευή των μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
@@ -221,4 +231,4 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
-    
+        
