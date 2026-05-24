@@ -165,13 +165,11 @@ if user_input := st.chat_input("Type your message here..."):
         with st.spinner("🔍 Searching The Internet..."):
             search_results = search_ddg(user_input)  
             if search_results:
-                 web_prompt = (
+                web_prompt = (
                     "You are a helpful assistant with access to real-time web search results.\n"
                     "Synthesize the following search results to answer the user's query accurately. "
                     "If the search results don't contain the full answer, use your pre-trained knowledge as well.\n"
                     f"Current year is 2026.\n\nSearch Results:\n{search_results}")
-
-                )
                 st.session_state.messages.append({"role": "system", "content": web_prompt, "is_search_context": True})
         
     st.session_state.messages.append({"role": "user", "content": user_input})
