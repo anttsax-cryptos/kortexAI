@@ -52,7 +52,8 @@ def load_chat_history(user_email, chat_id):
         response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
         records = response.data if hasattr(response, 'data') else response
         if records and len(records) > 0:
-            return records[0]["messages"] if isinstance(records, list) else records.get("messages", [])
+            # Παίρνουμε τα μηνύματα από την πρώτη εγγραφή της λίστας
+            return records[0].get("messages", [])
     except Exception as e:
         st.error(f"Error loading chat: {e}")
     return []
@@ -76,7 +77,7 @@ def rename_chat_file(user_email, old_chat_id, user_input, selected_model, messag
             model=selected_model,
             messages=[{"role": "user", "content": rename_prompt}]
         )
-        new_title = title_response.choices[0].message.content.strip().replace('"', '').replace('.', '')
+        new_title = title_response.choices.message.content.strip().replace('"', '').replace('.', '')
         new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
     except Exception:
         pass
@@ -113,7 +114,7 @@ def search_web(query, max_results=5):
                     raw_url = title_tag.get("href", "")
                     parsed_url = urllib.parse.urlparse(raw_url)
                     query_params = urllib.parse.parse_qs(parsed_url.query)
-                    clean_url = query_params.get("uddg", [raw_url])[0]
+                    clean_url = query_params.get("uddg", [raw_url])
                     snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
                     context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
             if context_list:
@@ -142,7 +143,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0] if isinstance(records, list) else records
+                        user_data = records[0]  # ΔΙΟΡΘΩΣΗ: Διαβάζουμε το 1ο στοιχείο της λίστας
                         stored_password = user_data.get("password")
                         
                         if Hasher.check_pw(login_password, stored_password):
