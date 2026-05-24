@@ -149,7 +149,7 @@ with st.sidebar:
     st.divider()
     
     # Επιλογή Μοντέλου και Persona μέσα στο Sidebar
-    selected_model = st.selectbox("🤖 Choose Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"])
+    selected_model = st.selectbox("🤖 Choose Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant",])
     selected_persona = st.selectbox("🎭 Choose Persona", list(system_prompts.keys()))
     web_search_enabled = st.toggle("🌐 Enable Web Search", value=False)
 
