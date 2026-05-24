@@ -36,7 +36,7 @@ def delete_chat(chat_id):
 # Αυτοματοποιημένη μετονομασία αρχείου συνομιλίας
 def rename_chat_file(old_chat_id, user_input, selected_model, messages):
     rename_prompt = f"Summarize this in 2 words: {user_input}"
-    title_response = ollama.generate(model=selected_model, prompt=rename_prompt)
+    title_response = client.chat.completions.create(model=selected_model, prompt=rename_prompt)
     new_title = title_response['response'].strip().replace('"', '').replace('.', '')
     new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
     
