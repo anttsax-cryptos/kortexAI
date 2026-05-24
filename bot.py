@@ -107,7 +107,7 @@ with st.sidebar:
             
     st.divider()
     st.header("⚙️ Bot Configurations")
-    selected_model = st.selectbox("Choose Model:", ["llama3.2:1b"], index=0)
+    selected_model = st.selectbox("Choose Model:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"], index=0)
     personality = st.selectbox("Bot Personality:", list(system_prompts.keys()))
     web_search_enabled = st.toggle("🌐 Enable Google Search", value=False)
     st.divider()
