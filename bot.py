@@ -145,7 +145,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0]
+                        user_data = records[0]  # Διαβάζουμε σωστά το πρώτο λεξικό της λίστας
                         stored_password = user_data.get("password")
                         
                         if Hasher.verify_password(login_password, stored_password):
@@ -212,5 +212,6 @@ with st.sidebar:
         
     st.divider()
     st.header("💬 Chat History")
+    
     if st.button("➕ New Chat", use_container_width=True):
-        
+
