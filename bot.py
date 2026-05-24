@@ -52,8 +52,8 @@ def search_web(query, max_results=3):
         return None
 
 # --- CONFIGURATION ΣΕΛΙΔΑΣ ---
-st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
-st.title("🤖 StrictexAI Multi-Personality Bot")
+st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
+st.title("🤖 StrictexAI Chatbot")
 
 # Ορισμός Προσωπικοτήτων
 personalities = {
@@ -61,7 +61,7 @@ personalities = {
     "Expert Programmer": "Είσαι ένας κορυφαίος Senior Software Engineer. Απάντα με ακρίβεια και καθαρά block κώδικα.",
     "Sarcastic Buddy": "Είσαι ένας έξυπνος, ειρωνικός και σαρκαστικός φίλος. Χρησιμοποίησε χιούμορ και πειράγματα.",
     "Creative Storyteller": "Είσαι ένας ευφάνταστος συγγραφέας παραμυθιών και ιστοριών. Δώσε δημιουργικό ύφος στις απαντήσεις σου.",
-    "Patient Teacher": "Είσαι ένας υπομονετικός δάσκαλος. Εξήγησε τα πάντα απλά, βήμα-βήμα, με παραδείγματα."
+    "Patient Teacher": "Είσαι ένας υπομονετικός και βοηθητηκος δάσκαλος. Εξήγησε τα πάντα απλά, βήμα-βήμα, με παραδείγματα."
 }
 
 # Αρχικοποίηση Τρέχουσας Συνομιλίας στο Session State
@@ -77,7 +77,7 @@ with st.sidebar:
     st.header("⚙️ Ρυθμίσεις & Ιστορικό")
     
     # Επιλογή Προσωπικότητας
-    selected_persona = st.selectbox("🎭 Επιλογή Προσωπικότητας:", list(personalities.keys()))
+    selected_personality = st.selectbox("🎭 Επιλογή Προσωπικότητας:", list(personalities.keys()))
     
     st.divider()
     
@@ -170,7 +170,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         with st.spinner("Thinking..."):
             try:
                 chat_completion = client.chat.completions.create(
-                    model="llama-3.3-70b-specdec", 
+                    model="llama-3.3-70b-versatile", 
                     messages=api_messages,
                     temperature=0.7
                 )
