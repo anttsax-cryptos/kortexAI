@@ -3,7 +3,8 @@ import json
 import os
 import datetime
 from googlesearch import search
-from groq import Groq  # <-- Προσθήκη Groq
+from groq import Groq 
+from duckduckgo_search import DDGS 
 
 # Φάκελος για την αποθήκευση όλων των συνομιλιών
 CHATS_DIR = "chats"
@@ -70,18 +71,23 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
         os.rename(old_file, new_file)
     return new_title
 
-# Συνάρτηση για αναζήτηση στο Google
-def search_google(query, max_results=3):
+# Συνάρτηση για αναζήτηση στο DuckDuckGo
+def search_ddg(query, max_results=3):
     try:
-        results = search(query, num_results=max_results, advanced=True)
         context_list = []
-        for r in results:
-            context_list.append(f"Title: {r.title}\nURL: {r.url}\nDescription: {r.description}")
+        with DDGS() as ddgs:
+            # Αναζήτηση κειμένου στο DuckDuckGo
+            results = ddgs.text(query, max_results=max_results)
+            for r in results:
+                context_list.append(f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}")
+        
         if context_list:
             return "\n\n".join(context_list)
     except Exception as e:
-        return f"Error during Google search: {str(e)}"
+        return f"Error during DuckDuckGo search: {str(e)}"
     return ""
+
+
 
 # Ρύθμιση σελίδας
 st.set_page_config(page_title="kortexAI", layout="wide", page_icon="🤖")
@@ -125,7 +131,7 @@ with st.sidebar:
     st.header("⚙️ Bot Configurations")
     selected_model = st.selectbox("Choose Model:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"], index=0)
     personality = st.selectbox("Bot Personality:", list(system_prompts.keys()))
-    web_search_enabled = st.toggle("🌐 Enable Google Search", value=False)
+    web_search_enabled = st.toggle("🌐 Enable Internet Search", value=False)
     st.divider()
     
     if st.button("🗑️ Delete Current Chat", use_container_width=True):
@@ -157,8 +163,9 @@ if user_input := st.chat_input("Type your message here..."):
     st.session_state.messages.insert(0, {"role": "system", "content": system_prompts[personality]})
     
     if web_search_enabled:
-        with st.spinner("🔍 Searching Google..."):
-            search_results = search_google(user_input)
+        with st.spinner("🔍 Searching The Internet..."):
+            search_results = search_ddg(user_input)  
+
             if search_results:
                 web_prompt = (
                     "CRITICAL INSTRUCTION: Use ONLY these live Google results. Current year is 2026.\n"
