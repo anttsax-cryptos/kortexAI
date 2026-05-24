@@ -2,7 +2,6 @@ import streamlit as st
 import json
 import os
 import datetime
-from googlesearch import search
 from groq import Groq 
 from duckduckgo_search import DDGS 
 
