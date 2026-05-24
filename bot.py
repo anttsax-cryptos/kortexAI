@@ -14,7 +14,7 @@ from supabase import create_client, Client
 # Ρύθμιση σελίδας
 st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
 
-# 1. Έλεγχος και Ασφαλής Σύνδεση με Supabase & Groq
+# Έλεγχος αν υπάρχουν τα απαραίτητα Secrets
 if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
     st.error("⚠️ Παρακαλώ προσθέστε τα SUPABASE_URL και SUPABASE_KEY στα Streamlit Secrets!")
     st.stop()
@@ -23,14 +23,22 @@ if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠️ Παρακαλώ προσθέστε το GROQ_API_KEY στα Streamlit Secrets!")
     st.stop()
 
-# Αυτόματος καθαρισμός URL από κενά ή πλάγιες γραμμές
-raw_url = st.secrets["SUPABASE_URL"].strip().strip('"').strip("'")
-if raw_url.endswith("/"):
-    raw_url = raw_url[:-1]
-raw_key = st.secrets["SUPABASE_KEY"].strip().strip('"').strip("'")
+# --- ΕΔΩ ΜΠΗΚΕ Η ΔΙΟΡΘΩΣΗ ΓΙΑ ΤΟ URL ΤΗΣ SUPABASE ---
+base_url = st.secrets["SUPABASE_URL"].strip().strip('"').strip("'")
+if base_url.endswith("/"):
+    base_url = base_url[:-1]
 
-supabase: Client = create_client(raw_url, raw_key)
+if not base_url.endswith("/rest/v1"):
+    supabase_url = f"{base_url}/rest/v1"
+else:
+    supabase_url = base_url
+
+supabase_key = st.secrets["SUPABASE_KEY"].strip().strip('"').strip("'")
+
+# Αρχικοποίηση των Clients
+supabase: Client = create_client(supabase_url, supabase_key)
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+# ---------------------------------------------------
 
 # --- ΣΥΝΑΡΤΗΣΕΙΣ ΔΙΑΧΕΙΡΙΣΗΣ ΣΥΝΟΜΙΛΙΩΝ (SUPABASE) ---
 def get_all_chats(user_email):
@@ -47,7 +55,7 @@ def load_chat_history(user_email, chat_id):
         response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
         records = response.data if hasattr(response, 'data') else response
         if records and len(records) > 0:
-            return records[0]["messages"]
+            return records[0]["messages"] # Επιστροφή των μηνυμάτων της πρώτης εγγραφής
     except Exception as e:
         st.error(f"Error loading chat: {e}")
     return []
@@ -142,7 +150,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                         
                         if Hasher.verify_password(login_password, stored_password):
                             st.session_state["authenticated"] = True
-                            st.session_state["username"] = login_email  # Το email γίνεται το ID του χρήστη
+                            st.session_state["username"] = login_email
                             st.success("Successful Login!")
                             st.rerun()
                         else:
@@ -206,9 +214,3 @@ with st.sidebar:
     st.header("💬 Chat History")
     
     if st.button("➕ New Chat", use_container_width=True):
-        new_chat_id = f"New Chat {datetime.datetime.now().strftime('%H%M%S')}"
-        st.session_state.current_chat = new_chat_id
-        st.session_state.messages = []
-        st.rerun()
-    
-    st.divider()
