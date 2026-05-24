@@ -73,7 +73,52 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
     return new_title
 
 # Σταθερή αναζήτηση Google χωρίς μπλοκάρισμα (μέσω Google HTML Search)
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
+
 def search_google(query, max_results=5):
+    try:
+        context_list = []
+        formatted_query = urllib.parse.quote_plus(query)
+        url = f"https://html.duckduckgo.com/html/?q={formatted_query}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return f"Error: Received status code {response.status_code}"
+            
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # Η νέα επίσημη δομή της HTML έκδοσης του DuckDuckGo
+        result_elements = soup.select("#links .result")
+        
+        for element in result_elements[:max_results]:
+            title_tag = element.select_one(".result__title a")
+            snippet_tag = element.select_one(".result__snippet")
+            
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+                # Καθαρισμός του URL από redirects
+                raw_url = title_tag.get("href", "")
+                parsed_url = urllib.parse.urlparse(raw_url)
+                query_params = urllib.parse.parse_qs(parsed_url.query)
+                
+                clean_url = query_params.get("uddg", [raw_url])[0]
+                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                
+                context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
+                
+        if context_list:
+            return "\n\n".join(context_list)
+            
+    except Exception as e:
+        return f"Error during search: {str(e)}"
+    return "No results found."
+
     try:
         context_list = []
         # Μορφοποίηση του query για το URL
@@ -222,7 +267,6 @@ if user_input := st.chat_input("Type your message here..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user", avatar="👤"):
         st.markdown(user_input)
-
     clean_input = user_input.strip().lower().replace("?", "")
     creator_questions = ["who is your creator", "who made you", "who created you", "ποιος σε εφτιαξε", "ποιος ειναι ο δημιουργος σου"]
     
