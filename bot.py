@@ -195,19 +195,29 @@ if user_input := st.chat_input("Type your message here..."):
     user_messages_count = sum(1 for m in st.session_state.messages if m["role"] == "user")
     is_first_message = (user_messages_count == 0)
     
+    # Καθαρίζουμε παλιά system μηνύματα και search contexts
     st.session_state.messages = [m for m in st.session_state.messages if m["role"] != "system" and not m.get("is_search_context", False)]
-    st.session_state.messages.insert(0, {"role": "system", "content": system_prompts[personality]})
     
+    # 1. Δημιουργία του βασικού System Prompt της προσωπικότητας
+    base_system = system_prompts[personality]
+    
+    # 2. Αν είναι ενεργοποιημένη η αναζήτηση, τρέχει και τροποποιεί το System Prompt
     if web_search_enabled:
-        with st.spinner("🔍 Searching The ..."):
-            search_results = search_google(user_input)  # <-- Καλεί τη νέα συνάρτηση
-            if search_results:
-                web_prompt = (
-                    "You are a helpful assistant with access to real-time web search results.\n"
-                    "Synthesize the following search results to answer the user's query accurately. "
-                    "If the search results don't contain the full answer, use your pre-trained knowledge as well.\n"
-                    f"Current year is 2026.\n\nSearch Results:\n{search_results}")
-                st.session_state.messages.append({"role": "system", "content": web_prompt, "is_search_context": True})
+        with st.spinner("🔍 Searching The Internet..."):
+            search_results = search_google(user_input)
+            if search_results and "Error" not in search_results:
+                # Εδώ αναγκάζουμε το bot να δώσει προτεραιότητα στο Internet
+                base_system = (
+                    f"{base_system}\n\n"
+                    "CRITICAL INSTRUCTION: You have access to LIVE internet search results below.\n"
+                    "You MUST prioritize these live results over your pre-trained knowledge (which ends in Dec 2023).\n"
+                    "The current year is 2026. If the user asks about recent events, new products (like iPhone Air), "
+                    "or current facts, rely strictly on the provided Search Results.\n\n"
+                    f"LIVE SEARCH RESULTS:\n{search_results}"
+                )
+    
+    # Εισαγωγή του ΕΝΙΑΙΟΥ συστήματος στην αρχή της λίστας (θέση 0)
+    st.session_state.messages.insert(0, {"role": "system", "content": base_system, "is_search_context": True})
         
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user", avatar="👤"):
