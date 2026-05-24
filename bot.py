@@ -3,7 +3,6 @@ import json
 import os
 import datetime
 from groq import Groq 
-from duckduckgo_search import DDGS
 import urllib.request
 import re
 from bs4 import BeautifulSoup 
