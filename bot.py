@@ -177,7 +177,7 @@ if user_input := st.chat_input("Type your message here..."):
         elif any(q in clean_input for q in creator_questions):
             full_response = "I am kortexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Ollama."
             message_placeholder.markdown(full_response)
-                else:
+        else:
             full_response = ""
             try:
                 # Κλήση του Groq API με Streaming
