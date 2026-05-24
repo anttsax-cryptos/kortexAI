@@ -177,17 +177,24 @@ if user_input := st.chat_input("Type your message here..."):
         elif any(q in clean_input for q in creator_questions):
             full_response = "I am kortexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Ollama."
             message_placeholder.markdown(full_response)
-        else:
+                else:
             full_response = ""
             try:
-                response_stream = ollama.chat(model=selected_model, messages=st.session_state.messages, stream=True)
+                # Κλήση του Groq API με Streaming
+                response_stream = client.chat.completions.create(
+                    model=selected_model,
+                    messages=st.session_state.messages,
+                    stream=True
+                )
                 for chunk in response_stream:
-                    full_response += chunk['message']['content']
-                    message_placeholder.markdown(full_response + "▌")
+                    if chunk.choices.delta.content:
+                        full_response += chunk.choices.delta.content
+                        message_placeholder.markdown(full_response + "▌")
                 message_placeholder.markdown(full_response)
             except Exception as e:
-                st.error("⚠️ Σφάλμα Ollama.")
-                full_response = "Could not connect to Ollama."
+                st.error(f"⚠️ Σφάλμα API: {str(e)}")
+                full_response = "Could not connect to the AI service."
+
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
         save_chat_history(st.session_state.current_chat, st.session_state.messages)
