@@ -70,23 +70,22 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
         os.rename(old_file, new_file)
     return new_title
 
-# Συνάρτηση για αναζήτηση στο DuckDuckGo
-def search_ddg(query, max_results=6):
+# Συνάρτηση για αναζήτηση στο DuckDuckGo (Διορθωμένη παράμετρος)
+def search_ddg(query, max_results=5):
     try:
         context_list = []
         with DDGS() as ddgs:
-            # Αναζήτηση κειμένου στο DuckDuckGo
-            results = ddgs.text(query, max_results=max_results)
-            for r in results:
-                context_list.append(f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}")
+            # Χρήση του num_results αντί για max_results για τη νέα έκδοση
+            results = ddgs.text(query, num_results=max_results)
+            if results:
+                for r in results:
+                    context_list.append(f"Title: {r.get('title', '')}\nURL: {r.get('href', '')}\nSnippet: {r.get('body', '')}")
         
         if context_list:
             return "\n\n".join(context_list)
     except Exception as e:
         return f"Error during DuckDuckGo search: {str(e)}"
     return ""
-
-
 
 # Ρύθμιση σελίδας
 st.set_page_config(page_title="kortexAI", layout="wide", page_icon="🤖")
