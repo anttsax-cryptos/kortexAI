@@ -23,15 +23,12 @@ if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠️ Παρακαλώ προσθέστε το GROQ_API_KEY στα Streamlit Secrets!")
     st.stop()
 
-# --- ΕΔΩ ΜΠΗΚΕ Η ΔΙΟΡΘΩΣΗ ΓΙΑ ΤΟ URL ΤΗΣ SUPABASE ---
-base_url = st.secrets["SUPABASE_URL"].strip().strip('"').strip("'")
-if base_url.endswith("/"):
-    base_url = base_url[:-1]
-
-if not base_url.endswith("/rest/v1"):
-    supabase_url = f"{base_url}/rest/v1"
-else:
-    supabase_url = base_url
+# --- ΑΠΟΛΥΤΟΣ ΚΑΘΑΡΙΣΜΟΣ URL ΓΙΑ ΤΗΝ ΑΠΟΦΥΓΗ ΤΟΥ PGRST125 ---
+supabase_url = st.secrets["SUPABASE_URL"].strip().strip('"').strip("'")
+if supabase_url.endswith("/"):
+    supabase_url = supabase_url[:-1]
+if supabase_url.endswith("/rest/v1"):
+    supabase_url = supabase_url.replace("/rest/v1", "")
 
 supabase_key = st.secrets["SUPABASE_KEY"].strip().strip('"').strip("'")
 
@@ -145,7 +142,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0]  # Διαβάζουμε σωστά το πρώτο λεξικό
+                        user_data = records[0]  # Διαβάζουμε σωστά το πρώτο στοιχείο της λίστας
                         stored_password = user_data.get("password")
                         
                         if Hasher.verify_password(login_password, stored_password):
