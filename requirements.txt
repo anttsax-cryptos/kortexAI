@@ -1,6 +1,5 @@
 streamlit
 groq
-supabase
-beautifulsoup4
 requests
-streamlit-authenticator==0.4.2
+beautifulsoup4
+duckduckgo-search
