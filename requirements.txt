@@ -4,3 +4,5 @@ supabase
 streamlit
 beautifulsoup4
 requests
+streamlit-authenticator==0.3.4
+supabase==2.4.0
