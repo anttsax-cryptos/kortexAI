@@ -72,6 +72,45 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
 def search_web(query, max_results=5):
     try:
         context_list = []
+        # Χρήση του επίσημου, δωρεάν Lite API της DuckDuckGo (JSON μορφή)
+        url = f"https://duckduckgo.com{urllib.parse.quote_plus(query)}&format=json&no_html=1&skip_disambig=1"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=8)
+        if response.status_code != 200:
+            return "No results found due to connection status."
+            
+        data = response.json()
+        
+        # 1. Έλεγχος για άμεση απάντηση (Abstract)
+        if data.get("AbstractText"):
+            title = data.get("Heading", "Abstract")
+            source_url = data.get("AbstractURL", "")
+            snippet = data.get("AbstractText")
+            context_list.append(f"Title: {title}\nURL: {source_url}\nSnippet: {snippet}")
+            
+        # 2. Έλεγχος για σχετικά αποτελέσματα (Related Topics)
+        if "RelatedTopics" in data:
+            for result in data["RelatedTopics"][:max_results]:
+                # Παράκαμψη υποκατηγοριών (Topics)
+                if "FirstURL" in result and "Text" in result:
+                    title = result.get("Text", "").split(" - ")[0]
+                    clean_url = result.get("FirstURL", "")
+                    snippet = result.get("Text", "")
+                    context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
+                    
+        if context_list:
+            return "\n\n".join(context_list)
+            
+    except Exception as e:
+        return f"Error during search: {str(e)}"
+    return "No results found."
+
+    try:
+        context_list = []
         formatted_query = urllib.parse.quote_plus(query)
         url = f"https://html.duckduckgo.com/html/?q={formatted_query}"
         
