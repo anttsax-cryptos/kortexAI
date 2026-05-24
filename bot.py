@@ -171,8 +171,6 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         decision = route_check.choices[0].message.content.strip().upper()
     except Exception:
         decision = "YES" # Σε περίπτωση σφάλματος, επιλέγουμε Search για ασφάλεια
-        
-    )
     
     try:
         route_check = client.chat.completions.create(
