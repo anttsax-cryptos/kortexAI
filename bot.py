@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import urllib.parse
 import re
 import streamlit_authenticator as stauth
+from streamlit_authenticator.utilities.hasher import Hasher
 from supabase import create_client, Client
 
 # Ρύθμιση σελίδας (ΠΡΕΠΕΙ να είναι η πρώτη εντολή Streamlit)
@@ -73,7 +74,6 @@ def rename_chat_file(username, old_chat_id, user_input, selected_model, messages
         new_title += f"_{datetime.datetime.now().strftime('%H%M%S')}"
         
     try:
-        # Ενημέρωση του τίτλου στη βάση
         supabase.table("user_chats").update({"chat_id": new_title, "messages": messages, "updated_at": "now()"}).eq("username", username).eq("chat_id", old_chat_id).execute()
     except Exception as e:
         st.error(f"Error renaming chat: {e}")
@@ -123,7 +123,9 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
             user_query = supabase.table("app_users").select("*").eq("username", login_username).execute()
             if user_query.data and len(user_query.data) > 0:
                 stored_password = user_query.data[0]["password"]
-                if stauth.Hasher.check_pw(stored_password, login_password):
+                
+                # Σωστός έλεγχος κωδικού για την έκδοση 0.4.x
+                if Hasher.verify_password(login_password, stored_password):
                     st.session_state["authenticated"] = True
                     st.session_state["username"] = login_username
                     st.session_state["name"] = user_query.data[0]["name"]
@@ -142,7 +144,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
         new_password = st.text_input("Επιλέξτε Password", type="password", key="new_pass")
         confirm_password = st.text_input("Επιβεβαίωση Password", type="password", key="conf_pass")
         
-        if st.button("Δημιουργία Λογαριασμού", use_container_width=True):
+        if st.button("Δημιουργía Λογαριασμού", use_container_width=True):
             if not (new_username and new_email and new_name and new_password):
                 st.warning("⚠️ Παρακαλώ συμπληρώστε όλα τα πεδία.")
             elif new_password != confirm_password:
@@ -152,7 +154,8 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                 if check_user.data and len(check_user.data) > 0:
                     st.error("❌ Αυτό το username χρησιμοποιείται ήδη.")
                 else:
-                    hashed_password = stauth.Hasher.hash(new_password)
+                    # Σωστή παραγωγή Hash κωδικού για την έκδοση 0.4.x
+                    hashed_password = Hasher.hash_password(new_password)
                     try:
                         supabase.table("app_users").insert({
                             "username": new_username,
@@ -163,9 +166,9 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                         st.success("🎉 Ο λογαριασμός δημιουργήθηκε! Συνδεθείτε στο πρώτο Tab.")
                     except Exception as e:
                         st.error(f"Σφάλμα κατά την εγγραφή: {e}")
-    st.stop() # Σταματάει εδώ αν δεν έχει γίνει επιτυχές login
+    st.stop()
 
-# --- ΑΠΟ ΕΔΩ ΚΑΙ ΠΕΡΑ Ο ΧΡΗΣΤΗΣ ΕΙΝΑΙ ΣΥΝΔΕΔΕΜΕΝΟΣ ---
+# --- ΑΠΟ ΕΔΩ ΚΑΙ ΠΕΡΑ Ο ΧΡΗΣΤΗΣ ΕΧΕΙ ΣΥΝΔΕΘΕΙ ---
 current_user = st.session_state["username"]
 st.title("🤖 StrictexAI Chatbot")
 
@@ -210,5 +213,3 @@ with st.sidebar:
             st.rerun()
             
     st.divider()
-    selected_model = st.selectbox("🤖 Choose Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"])
-    selected_persona = st.selectbox("🎭 Choose Persona", list(system_prompts.keys()))
