@@ -52,8 +52,9 @@ def load_chat_history(user_email, chat_id):
         response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
         records = response.data if hasattr(response, 'data') else response
         if records and len(records) > 0:
-            # Παίρνουμε τα μηνύματα από την πρώτη εγγραφή της λίστας
-            return records[0].get("messages", [])
+            # ΔΙΟΡΘΩΣΗ: Παίρνουμε τα μηνύματα από το 1ο λεξικό της λίστας
+            user_chat_data = records[0]
+            return user_chat_data.get("messages", [])
     except Exception as e:
         st.error(f"Error loading chat: {e}")
     return []
@@ -143,7 +144,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0]  # ΔΙΟΡΘΩΣΗ: Διαβάζουμε το 1ο στοιχείο της λίστας
+                        user_data = records[0]  # ΔΙΟΡΘΩΣΗ: Παίρνουμε το 1ο λεξικό της λίστας
                         stored_password = user_data.get("password")
                         
                         if Hasher.check_pw(login_password, stored_password):
@@ -209,5 +210,3 @@ with st.sidebar:
         st.rerun()
         
     st.divider()
-    st.header("💬 Chat History")
-    
