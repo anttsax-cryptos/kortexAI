@@ -108,7 +108,6 @@ def search_web(query, max_results=5):
         return f"Error during search: {str(e)}"
     return "No results found."
 
-
 # --- 2. ΣΥΣΤΗΜΑ AUTHENTICATION (SIGN IN / SIGN UP) ---
 if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
     st.title("🤖 StrictexAI - Login / Sign Up")
@@ -120,21 +119,31 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
         login_password = st.text_input("Password", type="password", key="login_pass")
         
         if st.button("Σύνδεση", use_container_width=True):
-            user_query = supabase.table("app_users").select("*").eq("username", login_username).execute()
-            if user_query.data and len(user_query.data) > 0:
-                stored_password = user_query.data[0]["password"]
-                
-                # Σωστός έλεγχος κωδικού για την έκδοση 0.4.x
-                if Hasher.verify_password(login_password, stored_password):
-                    st.session_state["authenticated"] = True
-                    st.session_state["username"] = login_username
-                    st.session_state["name"] = user_query.data[0]["name"]
-                    st.success(f"Καλώς ορίσατε {st.session_state['name']}!")
-                    st.rerun()
-                else:
-                    st.error("❌ Λάθος κωδικός πρόσβασης.")
+            if not login_username or not login_password:
+                st.warning("⚠️ Παρακαλώ συμπληρώστε όλα τα πεδία.")
             else:
-                st.error("❌ Το username δεν υπάρχει.")
+                try:
+                    response = supabase.table("app_users").select("*").eq("username", login_username).execute()
+                    
+                    # Νέος έλεγχος συμβατός για supabase-py v2.x
+                    records = response.data if hasattr(response, 'data') else response
+                    
+                    if records and len(records) > 0:
+                        user_data = records[0]  # Παίρνουμε την πρώτη εγγραφή
+                        stored_password = user_data.get("password")
+                        
+                        if Hasher.verify_password(login_password, stored_password):
+                            st.session_state["authenticated"] = True
+                            st.session_state["username"] = login_username
+                            st.session_state["name"] = user_data.get("name", login_username)
+                            st.success(f"Καλώς ορίσατε {st.session_state['name']}!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Λάθος κωδικός πρόσβασης.")
+                    else:
+                        st.error("❌ Το username δεν υπάρχει.")
+                except Exception as db_err:
+                    st.error(f"Σφάλμα κατά τη σύνδεση: {str(db_err)}")
 
     with tab2:
         st.subheader("Δημιουργία Νέου Λογαριασμού")
@@ -144,28 +153,29 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
         new_password = st.text_input("Επιλέξτε Password", type="password", key="new_pass")
         confirm_password = st.text_input("Επιβεβαίωση Password", type="password", key="conf_pass")
         
-        if st.button("Δημιουργía Λογαριασμού", use_container_width=True):
+        if st.button("Δημιουργία Λογαριασμού", use_container_width=True):
             if not (new_username and new_email and new_name and new_password):
                 st.warning("⚠️ Παρακαλώ συμπληρώστε όλα τα πεδία.")
             elif new_password != confirm_password:
                 st.error("❌ Οι κωδικοί δεν ταιριάζουν.")
             else:
-                check_user = supabase.table("app_users").select("username").eq("username", new_username).execute()
-                if check_user.data and len(check_user.data) > 0:
-                    st.error("❌ Αυτό το username χρησιμοποιείται ήδη.")
-                else:
-                    # Σωστή παραγωγή Hash κωδικού για την έκδοση 0.4.x
-                    hashed_password = Hasher.hash_password(new_password)
-                    try:
+                try:
+                    check_user = supabase.table("app_users").select("username").eq("username", new_username).execute()
+                    existing_records = check_user.data if hasattr(check_user, 'data') else check_user
+                    
+                    if existing_records and len(existing_records) > 0:
+                        st.error("❌ Αυτό το username χρησιμοποιείται ήδη.")
+                    else:
+                        hashed_password = Hasher.hash_password(new_password)
                         supabase.table("app_users").insert({
                             "username": new_username,
                             "email": new_email,
                             "name": new_name,
                             "password": hashed_password
                         }).execute()
-                        st.success("🎉 Ο λογαριασμός δημιουργήθηκε! Συνδεθείτε στο πρώτο Tab.")
-                    except Exception as e:
-                        st.error(f"Σφάλμα κατά την εγγραφή: {e}")
+                        st.success("🎉 Ο λογαριασμός δημιουργήθηκε! Μπορείτε να συνδεθείτε στο πρώτο Tab.")
+                except Exception as e:
+                    st.error(f"Σφάλμα κατά την εγγραφή: {e}")
     st.stop()
 
 # --- ΑΠΟ ΕΔΩ ΚΑΙ ΠΕΡΑ Ο ΧΡΗΣΤΗΣ ΕΧΕΙ ΣΥΝΔΕΘΕΙ ---
