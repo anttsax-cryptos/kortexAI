@@ -72,6 +72,51 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
 def search_web(query, max_results=5):
     try:
         context_list = []
+        formatted_query = urllib.parse.quote_plus(query)
+        # Χρήση της σταθερής HTML έκδοσης
+        url = f"https://duckduckgo.com{formatted_query}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "el-GR,el;q=0.9,en-US;q=0.8,en;q=0.7"
+        }
+        
+        # Αύξηση του timeout στα 15 δευτερόλεπτα για να αποφευχθούν τα πρόωρα timeouts
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code != 200:
+            return f"Error: Received status code {response.status_code}"
+            
+        soup = BeautifulSoup(response.text, "html.parser")
+        # Σωστός selector για τα αποτελέσματα της DuckDuckGo HTML
+        result_elements = soup.select(".links_main.links_deep")
+        
+        for element in result_elements[:max_results]:
+            title_tag = element.select_one(".result__title a")
+            snippet_tag = element.select_one(".result__snippet")
+            
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+                raw_url = title_tag.get("href", "")
+                
+                # Αποκωδικοποίηση και καθαρισμός του URL από τα redirects της DuckDuckGo
+                parsed_url = urllib.parse.urlparse(raw_url)
+                query_params = urllib.parse.parse_qs(parsed_url.query)
+                
+                # ΔΙΟΡΘΩΣΗ: Παίρνουμε το string [0] αντί για ολόκληρη τη λίστα
+                clean_url = query_params.get("uddg", [raw_url])[0]
+                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                
+                context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
+                
+        if context_list:
+            return "\n\n".join(context_list)
+            
+    except Exception as e:
+        return f"Error during search: {str(e)}"
+    return "No results found."
+
+    try:
+        context_list = []
         # Χρήση του επίσημου, δωρεάν Lite API της DuckDuckGo (JSON μορφή)
         url = f"https://duckduckgo.com{urllib.parse.quote_plus(query)}&format=json&no_html=1&skip_disambig=1"
         
