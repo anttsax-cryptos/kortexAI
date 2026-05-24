@@ -3,50 +3,58 @@ import json
 import os
 import datetime
 from groq import Groq 
-import urllib.request
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
 import re
-from bs4 import BeautifulSoup 
+import streamlit_authenticator as stauth
+from supabase import create_client, Client
 
-# Φάκελος για την αποθήκευση όλων των συνομιλιών
-CHATS_DIR = "chats"
-if not os.path.exists(CHATS_DIR):
-    os.makedirs(CHATS_DIR)
+# Ρύθμιση σελίδας (ΠΡΕΠΕΙ να είναι η πρώτη εντολή Streamlit)
+st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
 
-# 1. Έλεγχος API Key στα Secrets του Streamlit
+# 1. Έλεγχος και Σύνδεση με Supabase & Groq
+if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
+    st.error("⚠️ Παρακαλώ προσθέστε τα SUPABASE_URL και SUPABASE_KEY στα Streamlit Secrets!")
+    st.stop()
+
 if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠️ Παρακαλώ προσθέστε το GROQ_API_KEY στα Streamlit Secrets!")
     st.stop()
 
-# 2. Αρχικοποίηση του Groq Client
+supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Συναρτήσεις για διαχείριση πολλαπλών αρχείων συνομιλιών
-def get_all_chats():
-    if not os.path.exists(CHATS_DIR):
+# --- ΣΥΝΑΡΤΗΣΕΙΣ ΔΙΑΧΕΙΡΙΣΗΣ ΣΥΝΟΜΙΛΙΩΝ (SUPABASE) ---
+def get_all_chats(username):
+    try:
+        response = supabase.table("user_chats").select("chat_id").eq("username", username).order("updated_at", descending=True).execute()
+        return [row["chat_id"] for row in response.data] if response.data else []
+    except Exception as e:
+        st.error(f"Error fetching chats: {e}")
         return []
-    files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
-    files.sort(key=lambda x: os.path.getmtime(os.path.join(CHATS_DIR, x)), reverse=True)
-    return [os.path.splitext(f)[0] for f in files]
 
-def load_chat_history(chat_id):
-    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+def load_chat_history(username, chat_id):
+    try:
+        response = supabase.table("user_chats").select("messages").eq("username", username).eq("chat_id", chat_id).execute()
+        if response.data and len(response.data) > 0:
+            return response.data[0]["messages"]
+    except Exception as e:
+        st.error(f"Error loading chat: {e}")
     return []
 
-def save_chat_history(chat_id, messages):
-    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(messages, f, ensure_ascii=False, indent=4)
+def save_chat_history(username, chat_id, messages):
+    try:
+        check = supabase.table("user_chats").select("id").eq("username", username).eq("chat_id", chat_id).execute()
+        if check.data and len(check.data) > 0:
+            supabase.table("user_chats").update({"messages": messages, "updated_at": "now()"}).eq("username", username).eq("chat_id", chat_id).execute()
+        else:
+            supabase.table("user_chats").insert({"username": username, "chat_id": chat_id, "messages": messages}).execute()
+    except Exception as e:
+        st.error(f"Error saving chat: {e}")
 
-def delete_chat(chat_id):
-    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-# Αυτοματοποιημένη μετονομασία αρχείου συνομιλίας με δομή Groq
-def rename_chat_file(old_chat_id, user_input, selected_model, messages):
+def rename_chat_file(username, old_chat_id, user_input, selected_model, messages):
+    new_title = "Saved Chat"
     try:
         rename_prompt = f"Summarize this in 2 words: {user_input}"
         title_response = client.chat.completions.create(
@@ -56,134 +64,127 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
         new_title = title_response.choices[0].message.content.strip().replace('"', '').replace('.', '')
         new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
     except Exception:
-        new_title = "Saved Chat"
+        pass
         
     if not new_title:
         new_title = "Saved Chat"
         
-    if new_title in get_all_chats():
+    if new_title in get_all_chats(username):
         new_title += f"_{datetime.datetime.now().strftime('%H%M%S')}"
         
-    old_file = os.path.join(CHATS_DIR, f"{old_chat_id}.json")
-    new_file = os.path.join(CHATS_DIR, f"{new_title}.json")
-    
-    save_chat_history(old_chat_id, messages)
-    if os.path.exists(old_file):
-        os.rename(old_file, new_file)
+    try:
+        # Ενημέρωση του τίτλου στη βάση
+        supabase.table("user_chats").update({"chat_id": new_title, "messages": messages, "updated_at": "now()"}).eq("username", username).eq("chat_id", old_chat_id).execute()
+    except Exception as e:
+        st.error(f"Error renaming chat: {e}")
     return new_title
 
-# Σταθερή αναζήτηση Google χωρίς μπλοκάρισμα (μέσω Google HTML Search)
-import requests
-from bs4 import BeautifulSoup
-import urllib.parse
-
-def search_google(query, max_results=5):
+# --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WEB ---
+def search_web(query, max_results=5):
     try:
         context_list = []
         formatted_query = urllib.parse.quote_plus(query)
-        url = f"https://html.duckduckgo.com/html/?q={formatted_query}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
+        url = f"https://duckduckgo.com{formatted_query}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         
         response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return f"Error: Received status code {response.status_code}"
-            
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Η νέα επίσημη δομή της HTML έκδοσης του DuckDuckGo
-        result_elements = soup.select("#links .result")
-        
-        for element in result_elements[:max_results]:
-            title_tag = element.select_one(".result__title a")
-            snippet_tag = element.select_one(".result__snippet")
-            
-            if title_tag:
-                title = title_tag.get_text(strip=True)
-                # Καθαρισμός του URL από redirects
-                raw_url = title_tag.get("href", "")
-                parsed_url = urllib.parse.urlparse(raw_url)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                
-                clean_url = query_params.get("uddg", [raw_url])[0]
-                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
-                
-                context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
-                
-        if context_list:
-            return "\n\n".join(context_list)
-            
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            result_elements = soup.select("#links .result")
+            for element in result_elements[:max_results]:
+                title_tag = element.select_one(".result__title a")
+                snippet_tag = element.select_one(".result__snippet")
+                if title_tag:
+                    title = title_tag.get_text(strip=True)
+                    raw_url = title_tag.get("href", "")
+                    parsed_url = urllib.parse.urlparse(raw_url)
+                    query_params = urllib.parse.parse_qs(parsed_url.query)
+                    clean_url = query_params.get("uddg", [raw_url])[0]
+                    snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                    context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
+            if context_list:
+                return "\n\n".join(context_list)
     except Exception as e:
         return f"Error during search: {str(e)}"
     return "No results found."
 
-    try:
-        context_list = []
-        # Μορφοποίηση του query για το URL
-        formatted_query = query.replace(' ', '+')
-        url = f"https://duckduckgo.com{formatted_query}"
-        
-        # Προσποίηση κανονικού browser για να μην υπάρχει μπλοκάρισμα
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        )
-        
-        html = urllib.request.urlopen(req).read()
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Εντοπισμός των αποτελεσμάτων στην καθαρή HTML σελίδα
-        links = soup.find_all('a', class_='result__url')
-        snippets = soup.find_all('td', class_='result__snippet')
-        titles = soup.find_all('a', class_='result__snippet') # Εναλλακτικό για titles
-        
-        for i in range(min(max_results, len(links))):
-            link_href = links[i].get('href', '')
-            # Καθαρισμός του DDG redirect URL για να πάρουμε το καθαρό link
-            clean_url = re.search(r'uddg=(.*?)&', link_href)
-            final_url = urllib.parse.unquote(clean_url.group(1)) if clean_url else link_href
-            
-            snippet_text = snippets[i].get_text().strip() if i < len(snippets) else ""
-            
-            context_list.append(f"Source Link: {final_url}\nInformation: {snippet_text}")
-            
-        if context_list:
-            return "\n\n".join(context_list)
-    except Exception as e:
-        return f"Error during search: {str(e)}"
-    return ""
 
-    try:
-        context_list = []
-        with DDGS() as ddgs:
-            # Χρήση του num_results αντί για max_results για τη νέα έκδοση
-            results = ddgs.text(query, num_results=max_results)
-            if results:
-                for r in results:
-                    context_list.append(f"Title: {r.get('title', '')}\nURL: {r.get('href', '')}\nSnippet: {r.get('body', '')}")
-        
-        if context_list:
-            return "\n\n".join(context_list)
-    except Exception as e:
-        return f"Error during DuckDuckGo search: {str(e)}"
-    return ""
+# --- 2. ΣΥΣΤΗΜΑ AUTHENTICATION (SIGN IN / SIGN UP) ---
+if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
+    st.title("🤖 StrictexAI - Login / Sign Up")
+    tab1, tab2 = st.tabs(["🔑 Είσοδος (Sign In)", "📝 Εγγραφή (Sign Up)"])
 
-# Ρύθμιση σελίδας
-st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
+    with tab1:
+        st.subheader("Σύνδεση στο StrictexAI")
+        login_username = st.text_input("Username", key="login_user")
+        login_password = st.text_input("Password", type="password", key="login_pass")
+        
+        if st.button("Σύνδεση", use_container_width=True):
+            user_query = supabase.table("app_users").select("*").eq("username", login_username).execute()
+            if user_query.data and len(user_query.data) > 0:
+                stored_password = user_query.data[0]["password"]
+                if stauth.Hasher.check_pw(stored_password, login_password):
+                    st.session_state["authenticated"] = True
+                    st.session_state["username"] = login_username
+                    st.session_state["name"] = user_query.data[0]["name"]
+                    st.success(f"Καλώς ορίσατε {st.session_state['name']}!")
+                    st.rerun()
+                else:
+                    st.error("❌ Λάθος κωδικός πρόσβασης.")
+            else:
+                st.error("❌ Το username δεν υπάρχει.")
+
+    with tab2:
+        st.subheader("Δημιουργία Νέου Λογαριασμού")
+        new_username = st.text_input("Επιλέξτε Username", key="new_user")
+        new_email = st.text_input("Το E-mail σας", key="new_email")
+        new_name = st.text_input("Το Όνομά σας (εμφανιζόμενο)", key="new_name")
+        new_password = st.text_input("Επιλέξτε Password", type="password", key="new_pass")
+        confirm_password = st.text_input("Επιβεβαίωση Password", type="password", key="conf_pass")
+        
+        if st.button("Δημιουργία Λογαριασμού", use_container_width=True):
+            if not (new_username and new_email and new_name and new_password):
+                st.warning("⚠️ Παρακαλώ συμπληρώστε όλα τα πεδία.")
+            elif new_password != confirm_password:
+                st.error("❌ Οι κωδικοί δεν ταιριάζουν.")
+            else:
+                check_user = supabase.table("app_users").select("username").eq("username", new_username).execute()
+                if check_user.data and len(check_user.data) > 0:
+                    st.error("❌ Αυτό το username χρησιμοποιείται ήδη.")
+                else:
+                    hashed_password = stauth.Hasher.hash(new_password)
+                    try:
+                        supabase.table("app_users").insert({
+                            "username": new_username,
+                            "email": new_email,
+                            "name": new_name,
+                            "password": hashed_password
+                        }).execute()
+                        st.success("🎉 Ο λογαριασμός δημιουργήθηκε! Συνδεθείτε στο πρώτο Tab.")
+                    except Exception as e:
+                        st.error(f"Σφάλμα κατά την εγγραφή: {e}")
+    st.stop() # Σταματάει εδώ αν δεν έχει γίνει επιτυχές login
+
+# --- ΑΠΟ ΕΔΩ ΚΑΙ ΠΕΡΑ Ο ΧΡΗΣΤΗΣ ΕΙΝΑΙ ΣΥΝΔΕΔΕΜΕΝΟΣ ---
+current_user = st.session_state["username"]
 st.title("🤖 StrictexAI Chatbot")
 
-# Αρχικά system prompts προσαρμοσμένα στο όνομα του bot
 system_prompts = {
-    "Friendly Assistant": "You are StricexAI, a helpful, polite, and kind AI assistant.",
+    "Friendly Assistant": "You are StrictexAI, a helpful, polite, and kind AI assistant.",
     "Expert Programmer": "You are StrictexAI, an elite senior software engineer. Give precise, clean code blocks.",
     "Creative Storyteller": "You are StrictexAI, a whimsical author. Answer with creative flair.",
     "Sarcastic Buddy": "You are StrictexAI, a witty, slightly sarcastic friend. Use humor."
 }
 
-# --- 1. SIDEBAR ---
+# --- 3. SIDEBAR (Ιστορικό & Ρυθμίσεις) ---
 with st.sidebar:
+    st.write(f"Καλώς ήρθες, **{st.session_state['name']}** 👋")
+    if st.button("🚪 Αποσύνδεση (Logout)", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.session_state["username"] = None
+        st.rerun()
+        
+    st.divider()
     st.header("💬 Chat History")
     
     if st.button("➕ New Chat", use_container_width=True):
@@ -193,7 +194,7 @@ with st.sidebar:
         st.rerun()
     
     st.divider()
-    saved_chats = get_all_chats()
+    saved_chats = get_all_chats(current_user)
     
     if "current_chat" not in st.session_state:
         if saved_chats:
@@ -205,119 +206,9 @@ with st.sidebar:
         label = f"📝 {chat}" if chat != st.session_state.current_chat else f"💬 {chat} (Active)"
         if st.button(label, key=chat, use_container_width=True):
             st.session_state.current_chat = chat
-            st.session_state.messages = load_chat_history(chat)
+            st.session_state.messages = load_chat_history(current_user, chat)
             st.rerun()
             
     st.divider()
-    st.header("⚙️ Bot Configurations")
-    selected_model = st.selectbox("Choose Model:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"], index=0)
-    personality = st.selectbox("Bot Personality:", list(system_prompts.keys()))
-    web_search_enabled = st.toggle("🌐 Enable Internet Search", value=True)
-    st.divider()
-    
-    if st.button("🗑️ Delete Current Chat", use_container_width=True):
-        delete_chat(st.session_state.current_chat)
-        if "messages" in st.session_state:
-            del st.session_state.messages
-        if "current_chat" in st.session_state:
-            del st.session_state.current_chat
-        st.rerun()
-
-# --- 2. ΑΡΧΙΚΟΠΟΙΗΣΗ ---
-if "messages" not in st.session_state:
-    st.session_state.messages = load_chat_history(st.session_state.current_chat)
-
-# --- 3. ΕΜΦΑΝΙΣΗ ΙΣΤΟΡΙΚΟΥ ---
-for message in st.session_state.messages:
-    if message["role"] != "system" and not message.get("is_search_context", False):
-        avatar = "🤖" if message["role"] == "assistant" else "👤"
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
-
-# --- 4. ΛΟΓΙΚΗ CHAT ---
-if user_input := st.chat_input("Type your message here..."):
-    
-    user_messages_count = sum(1 for m in st.session_state.messages if m["role"] == "user")
-    is_first_message = (user_messages_count == 0)
-    
-    # Καθαρίζουμε παλιά system μηνύματα και search contexts
-    st.session_state.messages = [m for m in st.session_state.messages if m["role"] != "system" and not m.get("is_search_context", False)]
-    
-    # 1. Δημιουργία του βασικού System Prompt της προσωπικότητας
-    base_system = system_prompts[personality]
-    
-    # 2. Αν είναι ενεργοποιημένη η αναζήτηση, τρέχει και τροποποιεί το System Prompt
-    if web_search_enabled:
-        with st.spinner("🔍 Searching The Internet..."):
-            search_results = search_google(user_input)
-            if search_results and "Error" not in search_results:
-                # Εδώ αναγκάζουμε το bot να δώσει προτεραιότητα στο Internet
-                base_system = (
-                    f"{base_system}\n\n"
-                    "CRITICAL INSTRUCTION: You have access to LIVE internet search results below.\n"
-                    "You MUST prioritize these live results over your pre-trained knowledge (which ends in Dec 2023).\n"
-                    "The current year is 2026. If the user asks about recent events, new products (like iPhone Air), "
-                    "or current facts, rely strictly on the provided Search Results.\n\n"
-                    f"LIVE SEARCH RESULTS:\n{search_results}"
-                )
-    
-    # Εισαγωγή του ΕΝΙΑΙΟΥ συστήματος στην αρχή της λίστας (θέση 0)
-    st.session_state.messages.insert(0, {"role": "system", "content": base_system, "is_search_context": True})
-        
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(user_input)
-    clean_input = user_input.strip().lower().replace("?", "")
-    creator_questions = ["who is your creator", "who made you", "who created you", "ποιος σε εφτιαξε", "ποιος ειναι ο δημιουργος σου"]
-    
-    with st.chat_message("assistant", avatar="🤖"):
-        message_placeholder = st.empty()
-        
-        if "//2012//" in clean_input:
-            full_response = """🤖 **MY CREATOR!** 🤖
-
-```text
-      0110
-     01  10
-    01    10
-   0101101010
-  010      010
- 010        010
-```
-"""
-            message_placeholder.markdown(full_response)
-        elif any(q in clean_input for q in creator_questions):
-            full_response = "I am StrictexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Groq Cloud."
-            message_placeholder.markdown(full_response)
-        else:
-            full_response = ""
-            try:
-                # Καθαρισμός των custom keys (όπως το is_search_context) πριν σταλθούν στο API της Groq
-                api_messages = [
-                    {"role": m["role"], "content": m["content"]} 
-                    for m in st.session_state.messages
-                ]
-                
-                # Κλήση του Groq API με Streaming
-                response_stream = client.chat.completions.create(
-                    model=selected_model,
-                    messages=api_messages,
-                    stream=True
-                )
-                for chunk in response_stream:
-                    if chunk.choices[0].delta.content:
-                        full_response += chunk.choices[0].delta.content
-                        message_placeholder.markdown(full_response + "▌")
-                message_placeholder.markdown(full_response)
-            except Exception as e:
-                st.error(f"⚠️ Σφάλμα API: {str(e)}")
-                full_response = "Could not connect to the AI service."
-
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-        
-        # Αυτόματη μετονομασία τίτλου στο πρώτο μήνυμα
-        if is_first_message and full_response != "Could not connect to the AI service.":
-            new_title = rename_chat_file(st.session_state.current_chat, user_input, selected_model, st.session_state.messages)
-            st.session_state.current_chat = new_title
-
-        save_chat_history(st.session_state.current_chat, st.session_state.messages)
+    selected_model = st.selectbox("🤖 Choose Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"])
+    selected_persona = st.selectbox("🎭 Choose Persona", list(system_prompts.keys()))
