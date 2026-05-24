@@ -3,7 +3,8 @@ import json
 import os
 import datetime
 from groq import Groq
-from duckduckgo_search import DDGS
+import requests
+import urllib.parse
 
 # 1. Φάκελος για την αποθήκευση των συνομιλιών τοπικά
 CHATS_DIR = "chats"
@@ -23,9 +24,7 @@ def get_all_chats():
     if not os.path.exists(CHATS_DIR):
         return []
     files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
-    # Ταξινόμηση βάσει ημερομηνίας τροποποίησης (πρώτα τα πρόσφατα)
     files.sort(key=lambda x: os.path.getmtime(os.path.join(CHATS_DIR, x)), reverse=True)
-    # Επιστρέφει μόνο το όνομα χωρίς το .json ως απλό string
     return [os.path.splitext(f)[0] for f in files]
 
 def load_chat_history(chat_id):
@@ -40,18 +39,38 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ DUCKDUCKGO ---
-def search_web(query, max_results=3):
+# --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (Ελληνική & Αγγλική) ---
+def search_wikipedia(query, max_results=3):
+    context_list = []
+    formatted_query = urllib.parse.quote_plus(query)
+    headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
+    
+    # 1. Δοκιμή στην Ελληνική Wikipedia
     try:
-        context_list = []
-        with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=max_results)
-            if results:
-                for r in results:
-                    context_list.append(f"Τίτλος: {r.get('title')}\nLink: {r.get('href')}\nΠληροφορία: {r.get('body')}")
-        return "\n\n".join(context_list) if context_list else None
+        url_el = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
+        response = requests.get(url_el, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if len(data) >= 4 and data[1]:  # Αν υπάρχουν αποτελέσματα
+                for i in range(len(data[1])):
+                    context_list.append(f"Τίτλος: {data[1][i]}\nLink: {data[3][i]}\nΠληροφορία: {data[2][i]}")
     except Exception:
-        return None
+        pass
+
+    # 2. Αν δεν βρέθηκε τίποτα στα ελληνικά, δοκιμή στην Αγγλική Wikipedia
+    if not context_list:
+        try:
+            url_en = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
+            response = requests.get(url_en, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if len(data) >= 4 and data[1]:
+                    for i in range(len(data[1])):
+                        context_list.append(f"Title: {data[1][i]}\nLink: {data[3][i]}\nInformation: {data[2][i]}")
+        except Exception:
+            pass
+
+    return "\n\n".join(context_list) if context_list else None
 
 # --- CONFIGURATION ΣΕΛΙΔΑΣ ---
 st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
@@ -81,7 +100,7 @@ if "messages" not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Ρυθμίσεις & Ιστορικό")
     
-    # Μοναδικό key για την προσωπικότητα
+    # Επιλογή Προσωπικότητας
     selected_persona = st.selectbox(
         "🎭 Επιλογή Προσωπικότητας:", 
         list(personalities.keys()), 
@@ -99,7 +118,6 @@ with st.sidebar:
             
         current_index = all_chats.index(st.session_state.current_chat)
             
-        # Προσθήκη μοναδικού key="chat_selector" για αποφυγή Duplicate ID Error
         selected_chat = st.selectbox(
             "💬 Επιλέξτε Συνομιλία:", 
             all_chats, 
@@ -151,14 +169,13 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
     save_chat_history(st.session_state.current_chat, st.session_state.messages)
-
-    # 2. Έξυπνη απόφαση για Αναζήτηση στο Internet (Routing)
+    
+    # 2. Έξυπνη απόφαση για Αναζήτηση (Routing)
     router_prompt = (
         f"Ανάλυσε την ερώτηση του χρήστη: '{user_input}'. "
-        "Αν η ερώτηση αφορά συγκεκριμένα προϊόντα, μοντέλα τεχνολογίας (π.χ. Samsung S26, iPhone, GPUs), "
-        "τρέχοντα γεγονότα, πρόσφατες ειδήσεις, ή πληροφορίες που μπορεί να άλλαξαν πρόσφατα, "
-        "απάντησε ΑΥΣΤΗΡΑ με τη λέξη YES. "
-        "Αν είναι μια γενική ερώτηση, κώδικας, ή σενάριο, απάντησε NO. "
+        "Αν η ερώτηση αφορά ιστορικά γεγονότα, πρόσωπα, επιστήμη, γεωγραφία, ορισμούς, "
+        "ή εγκυκλοπαιδικές γνώσεις που χρειάζονται επιβεβαίωση, απάντησε ΑΥΣΤΗΡΑ YES. "
+        "Αν είναι απλή κουβέντα, κώδικας ή προσωπική γνώμη, απάντησε NO. "
         "Απάντησε με μία μόνο λέξη: YES ή NO."
     )
     
@@ -170,25 +187,15 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         )
         decision = route_check.choices[0].message.content.strip().upper()
     except Exception:
-        decision = "YES" # Σε περίπτωση σφάλματος, επιλέγουμε Search για ασφάλεια
-    
-    try:
-        route_check = client.chat.completions.create(
-            model="llama-3.3-70b-specdec",
-            messages=[{"role": "user", "content": router_prompt}],
-            temperature=0.0
-        )
-        decision = route_check.choices[0].message.content.strip().upper()
-    except Exception:
-        decision = "NO"
+        decision = "YES"
 
-    # Αν το μοντέλο πει YES, ψάχνουμε στο DuckDuckGo
+    # Αν το μοντέλο πει YES, ψάχνουμε στην Wikipedia
     search_context = ""
     if "YES" in decision:
-        with st.spinner("🔍 Αναζήτηση πληροφοριών στο διαδίκτυο..."):
-            results = search_web(user_input)
+        with st.spinner("🔍 Αναζήτηση στην Wikipedia..."):
+            results = search_wikipedia(user_input)
             if results:
-                search_context = f"\n\n[Πληροφορίες από το Internet]:\n{results}\n\nΧρησιμοποίησε τις παραπάνω πληροφορίες για να απαντήσεις αν κρίνεις απαραίτητο."
+                search_context = f"\n\n[Πληροφορίες από την Wikipedia]:\n{results}\n\nΧρησιμοποίησε τα παραπάνω εγκυκλοπαιδικά δεδομένα για να εμπλουτίσεις την απάντησή σου."
 
     # 3. Κατασκευή των μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
@@ -202,7 +209,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         with st.spinner("Thinking..."):
             try:
                 chat_completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile", 
+                    model="groq/compound",
                     messages=api_messages,
                     temperature=0.7
                 )
@@ -214,4 +221,4 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
-        
+    
