@@ -130,6 +130,24 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
     
+    # ΠΡΟΣΘΗΚΗ: Κουμπί Διαγραφής Τρέχουσας Συνομιλίας
+    if st.button("🗑️ Delete Current Chat", use_container_width=True, type="primary"):
+        if "current_chat" in st.session_state:
+            file_to_delete = os.path.join(CHATS_DIR, f"{st.session_state.current_chat}.json")
+            if os.path.exists(file_to_delete):
+                os.remove(file_to_delete)
+            
+            # Καθαρισμός session state και εύρεση επόμενου chat
+            remaining_chats = [c for c in get_all_chats() if c != st.session_state.current_chat]
+            if remaining_chats:
+                st.session_state.current_chat = remaining_chats[0]
+                st.session_state.messages = load_chat_history(remaining_chats[0])
+            else:
+                new_chat_id = f"New Chat {datetime.datetime.now().strftime('%H%M%S')}"
+                st.session_state.current_chat = new_chat_id
+                st.session_state.messages = []
+            st.rerun()
+
     st.divider()
     saved_chats = get_all_chats()
     
@@ -170,6 +188,8 @@ if user_input := st.chat_input("Type your message here..."):
     with st.chat_message("user"):
         st.write(user_input)
     
+    # Αποθήκευση στο ιστορικό
+    is_first_message = (len(st.session_state.messages) == 0)
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     # Προετοιμασία των μηνυμάτων για το API (συμπεριλαμβανομένου του System Prompt)
@@ -197,16 +217,14 @@ if user_input := st.chat_input("Type your message here..."):
                 assistant_response = response.choices[0].message.content
                 st.write(assistant_response)
                 st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+                
+                # Αποθήκευση/Μετονομασία μετά την επιτυχή απάντηση
+                if is_first_message:
+                    new_id = rename_chat_file(st.session_state.current_chat, user_input, selected_model, st.session_state.messages)
+                    st.session_state.current_chat = new_id
+                else:
+                    save_chat_history(st.session_state.current_chat, st.session_state.messages)
+                    
+                st.rerun()
             except Exception as e:
                 st.error(f"Error calling Groq API: {str(e)}")
-                assistant_response = None
-
-    # Αν είναι το πρώτο μήνυμα, κάνε αυτόματη μετονομασία του αρχείου chat
-    if assistant_response and len(st.session_state.messages) <= 3 and st.session_state.current_chat.startswith("New Chat"):
-        old_id = st.session_state.current_chat
-        new_id = rename_chat_file(old_id, user_input, selected_model, st.session_state.messages)
-        st.session_state.current_chat = new_id
-        st.rerun()
-    else:
-        # Αλλιώς απλά αποθήκευσε τη συνομιλία
-        save_chat_history(st.session_state.current_chat, st.session_state.messages)
