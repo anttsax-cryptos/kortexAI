@@ -70,39 +70,25 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
     return new_title
 
 def search_web(query, max_results=5):
+def search_web(query, max_results=5):
     try:
         context_list = []
-        formatted_query = urllib.parse.quote_plus(query)
+        # Χρήση του DuckDuckGo Search που έχετε ήδη κάνει import
+        with DDGS() as ddgs:
+            results = ddgs.text(query, max_results=max_results)
+            if results:
+                for r in results:
+                    title = r.get('title', 'No Title')
+                    href = r.get('href', 'No URL')
+                    body = r.get('body', 'No Description')
+                    context_list.append(f"Title: {title}\nURL: {href}\nSnippet: {body}")
         
-        # Χρήση του Open Search API της Wikipedia (100% ελεύθερο και σταθερό)
-        url = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
-        
-        headers = {
-            "User-Agent": "StrictexAIChatbot/1.0 (contact@example.com)"
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Η Wikipedia επιστρέφει: [query, [titles], [descriptions], [urls]]
-            if len(data) >= 4:
-                titles = data[1]
-                descriptions = data[2]
-                urls = data[3]
-                
-                for i in range(len(titles)):
-                    context_list.append(f"Title: {titles[i]}\nURL: {urls[i]}\nSnippet: {descriptions[i]}")
-                    
         if context_list:
             return "\n\n".join(context_list)
-            
     except Exception as e:
         return f"Error during search: {str(e)}"
-        
     return "No results found."
-
-
+    
 # Ρύθμιση σελίδας
 st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
 st.title("🤖 StrictexAI Chatbot")
