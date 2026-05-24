@@ -159,7 +159,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                 search_context = f"\n\n[Πληροφορίες από το Internet]:\n{results}\n\nΧρησιμοποίησε τις παραπάνω πληροφορίες για να απαντήσεις αν κρίνεις απαραίτητο."
 
     # 3. Κατασκευή των μηνυμάτων για το Groq API
-    full_system_prompt = personalities[selected_personalities] + search_context
+    full_system_prompt = persona[selected_persona] + search_context
     
     api_messages = [{"role": "system", "content": full_system_prompt}]
     for msg in st.session_state.messages:
