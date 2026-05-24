@@ -3,15 +3,25 @@ import json
 import os
 import datetime
 from googlesearch import search
+from groq import Groq  # <-- Προσθήκη Groq
 
 # Φάκελος για την αποθήκευση όλων των συνομιλιών
 CHATS_DIR = "chats"
 if not os.path.exists(CHATS_DIR):
     os.makedirs(CHATS_DIR)
 
+# 1. Έλεγχος API Key στα Secrets του Streamlit
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("⚠️ Παρακαλώ προσθέστε το GROQ_API_KEY στα Streamlit Secrets!")
+    st.stop()
+
+# 2. Αρχικοποίηση του Groq Client
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
 # Συναρτήσεις για διαχείριση πολλαπλών αρχείων συνομιλιών
 def get_all_chats():
-    # Επιστρέφει ΜΟΝΟ τα καθαρά ονόματα των συνομιλιών χωρίς την επέκταση .json
+    if not os.path.exists(CHATS_DIR):
+        return []
     files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
     files.sort(key=lambda x: os.path.getmtime(os.path.join(CHATS_DIR, x)), reverse=True)
     return [os.path.splitext(f)[0] for f in files]
@@ -33,13 +43,19 @@ def delete_chat(chat_id):
     if os.path.exists(file_path):
         os.remove(file_path)
 
-# Αυτοματοποιημένη μετονομασία αρχείου συνομιλίας
+# Αυτοματοποιημένη μετονομασία αρχείου συνομιλίας με δομή Groq
 def rename_chat_file(old_chat_id, user_input, selected_model, messages):
-    rename_prompt = f"Summarize this in 2 words: {user_input}"
-    title_response = client.chat.completions.create(model=selected_model, prompt=rename_prompt)
-    new_title = title_response['response'].strip().replace('"', '').replace('.', '')
-    new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
-    
+    try:
+        rename_prompt = f"Summarize this in 2 words: {user_input}"
+        title_response = client.chat.completions.create(
+            model=selected_model,
+            messages=[{"role": "user", "content": rename_prompt}]
+        )
+        new_title = title_response.choices[0].message.content.strip().replace('"', '').replace('.', '')
+        new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
+    except Exception:
+        new_title = "Saved Chat"
+        
     if not new_title:
         new_title = "Saved Chat"
         
@@ -155,12 +171,11 @@ if user_input := st.chat_input("Type your message here..."):
         st.markdown(user_input)
 
     clean_input = user_input.strip().lower().replace("?", "")
-    creator_questions = ["who is your creator", "who made you","Who created you", "ποιος σε εφτιαξε", "ποιος ειναι ο δημιουργος σου"]
+    creator_questions = ["who is your creator", "who made you", "who created you", "ποιος σε εφτιαξε", "ποιος ειναι ο δημιουργος σου"]
     
     with st.chat_message("assistant", avatar="🤖"):
         message_placeholder = st.empty()
         
-        # Easter Egg (Με τριπλά εισαγωγικά για ασφάλεια)
         if "//2012//" in clean_input:
             full_response = """🤖 **MY CREATOR!** 🤖
 
@@ -175,39 +190,37 @@ if user_input := st.chat_input("Type your message here..."):
 """
             message_placeholder.markdown(full_response)
         elif any(q in clean_input for q in creator_questions):
-            full_response = "I am kortexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Ollama."
+            full_response = "I am kortexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Groq Cloud."
             message_placeholder.markdown(full_response)
         else:
             full_response = ""
             try:
+                # Καθαρισμός των custom keys (όπως το is_search_context) πριν σταλθούν στο API της Groq
+                api_messages = [
+                    {"role": m["role"], "content": m["content"]} 
+                    for m in st.session_state.messages
+                ]
+                
                 # Κλήση του Groq API με Streaming
                 response_stream = client.chat.completions.create(
                     model=selected_model,
-                    messages=st.session_state.messages,
+                    messages=api_messages,
                     stream=True
                 )
                 for chunk in response_stream:
-                    if chunk.choices.delta.content:
-                        full_response += chunk.choices.delta.content
+                    if chunk.choices[0].delta.content:
+                        full_response += chunk.choices[0].delta.content
                         message_placeholder.markdown(full_response + "▌")
                 message_placeholder.markdown(full_response)
             except Exception as e:
                 st.error(f"⚠️ Σφάλμα API: {str(e)}")
                 full_response = "Could not connect to the AI service."
 
-
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+        
+        # Αυτόματη μετονομασία τίτλου στο πρώτο μήνυμα
+        if is_first_message and full_response != "Could not connect to the AI service.":
+            new_title = rename_chat_file(st.session_state.current_chat, user_input, selected_model, st.session_state.messages)
+            st.session_state.current_chat = new_title
+
         save_chat_history(st.session_state.current_chat, st.session_state.messages)
-
-    if is_first_message and "New Chat" in st.session_state.current_chat:
-        try:
-            new_name = rename_chat_file(st.session_state.current_chat, user_input, selected_model, st.session_state.messages)
-            if new_name != st.session_state.current_chat:
-                st.session_state.current_chat = new_name
-                st.rerun()
-        except Exception as e:
-            pass
-
-# --- 5. FOOTER ---
-st.divider()
-st.markdown("<p style='text-align: center; color: gray; font-size: 13px;'><b>kortexAI</b> | Created by Antonis Tsachpinis | Powered by Streamlit & Ollama 3.2:1b</p>", unsafe_allow_html=True)
