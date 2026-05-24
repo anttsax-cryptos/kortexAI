@@ -1,5 +1,4 @@
 import streamlit as st
-import ollama
 import json
 import os
 import datetime
