@@ -52,7 +52,7 @@ def load_chat_history(user_email, chat_id):
         response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
         records = response.data if hasattr(response, 'data') else response
         if records and len(records) > 0:
-            return records[0]["messages"]
+            return records[0]["messages"] if isinstance(records, list) else records.get("messages", [])
     except Exception as e:
         st.error(f"Error loading chat: {e}")
     return []
@@ -142,10 +142,9 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0]  # Διαβάζουμε το πρώτο στοιχείο της λίστας
+                        user_data = records[0] if isinstance(records, list) else records
                         stored_password = user_data.get("password")
                         
-                        # Διορθωμένη μέθοδος ελέγχου κωδικού (check_pw)
                         if Hasher.check_pw(login_password, stored_password):
                             st.session_state["authenticated"] = True
                             st.session_state["username"] = login_email
@@ -179,7 +178,6 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     if existing_records and len(existing_records) > 0:
                         st.error("❌ Αυτό το email χρησιμοποιείται ήδη.")
                     else:
-                        # Διορθωμένη μέθοδος κρυπτογράφησης (hash)
                         hashed_password = Hasher.hash(new_password)
                         supabase.table("app_users").insert({
                             "email": new_email,
@@ -201,7 +199,7 @@ system_prompts = {
     "Sarcastic Buddy": "You are StrictexAI, a witty, slightly sarcastic friend. Use humor."
 }
 
-# --- 3. SIDEBAR (Ιστορικό & Ρυθμίσεις) ---
+# --- 3. SIDEBAR (Ιστορικό & Όλες οι Ρυθμίσεις) ---
 with st.sidebar:
     st.write(f"📧 Connected as: **{current_user}**")
     if st.button("🚪 Αποσύνδεση (Logout)", use_container_width=True):
@@ -210,3 +208,5 @@ with st.sidebar:
         st.rerun()
         
     st.divider()
+    st.header("💬 Chat History")
+    
