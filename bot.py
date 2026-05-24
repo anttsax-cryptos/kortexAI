@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import os
 import datetime
-from groq import Groq 
+from groq import Groq
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
@@ -63,17 +63,15 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
         
     old_file = os.path.join(CHATS_DIR, f"{old_chat_id}.json")
     new_file = os.path.join(CHATS_DIR, f"{new_title}.json")
-    
     save_chat_history(old_chat_id, messages)
     if os.path.exists(old_file):
         os.rename(old_file, new_file)
     return new_title
 
-def search_web(query, max_results=5):
+# ΔΙΟΡΘΩΜΕΝΗ ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ (Με DuckDuckGo)
 def search_web(query, max_results=5):
     try:
         context_list = []
-        # Χρήση του DuckDuckGo Search που έχετε ήδη κάνει import
         with DDGS() as ddgs:
             results = ddgs.text(query, max_results=max_results)
             if results:
@@ -82,13 +80,12 @@ def search_web(query, max_results=5):
                     href = r.get('href', 'No URL')
                     body = r.get('body', 'No Description')
                     context_list.append(f"Title: {title}\nURL: {href}\nSnippet: {body}")
-        
         if context_list:
             return "\n\n".join(context_list)
     except Exception as e:
         return f"Error during search: {str(e)}"
     return "No results found."
-    
+
 # Ρύθμιση σελίδας
 st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
 st.title("🤖 StrictexAI Chatbot")
@@ -110,102 +107,15 @@ with st.sidebar:
         st.session_state.current_chat = new_chat_id
         st.session_state.messages = []
         st.rerun()
-    
-    # ΠΡΟΣΘΗΚΗ: Κουμπί Διαγραφής Τρέχουσας Συνομιλίας
+        
+    # ΣΩΣΤΑ ΣΤΟΙΧΙΣΜΕΝΟ ΚΟΥΜΠΙ ΔΙΑΓΡΑΦΗΣ
     if st.button("🗑️ Delete Current Chat", use_container_width=True, type="primary"):
         if "current_chat" in st.session_state:
             file_to_delete = os.path.join(CHATS_DIR, f"{st.session_state.current_chat}.json")
             if os.path.exists(file_to_delete):
                 os.remove(file_to_delete)
-            
-            # Καθαρισμός session state και εύρεση επόμενου chat
-            remaining_chats = [c for c in get_all_chats() if c != st.session_state.current_chat]
-            if remaining_chats:
-                st.session_state.current_chat = remaining_chats[0]
-                st.session_state.messages = load_chat_history(remaining_chats[0])
-            else:
-                new_chat_id = f"New Chat {datetime.datetime.now().strftime('%H%M%S')}"
-                st.session_state.current_chat = new_chat_id
-                st.session_state.messages = []
+            st.session_state.messages = []
+            if "current_chat" in st.session_state:
+                del st.session_state.current_chat
             st.rerun()
-
-    st.divider()
-    saved_chats = get_all_chats()
-    
-    if "current_chat" not in st.session_state:
-        if saved_chats:
-            st.session_state.current_chat = saved_chats[0]
-        else:
-            st.session_state.current_chat = f"New Chat {datetime.datetime.now().strftime('%H%M%S')}"
-
-    for chat in saved_chats:
-        label = f"📝 {chat}" if chat != st.session_state.current_chat else f"💬 {chat} (Active)"
-        if st.button(label, key=chat, use_container_width=True):
-            st.session_state.current_chat = chat
-            st.session_state.messages = load_chat_history(chat)
-            st.rerun()
-            
-    st.divider()
-    
-    # Επιλογή Μοντέλου και Persona μέσα στο Sidebar
-    selected_model = st.selectbox("🤖 Choose Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant",])
-    selected_persona = st.selectbox("🎭 Choose Persona", list(system_prompts.keys()))
-    web_search_enabled = st.toggle("🌐 Enable Web Search", value=False)
-
-# --- 2. ΚΥΡΙΩΣ ΠΕΡΙΕΧΟΜΕΝΟ (Chat Interface) ---
-# Φόρτωση μηνυμάτων αν δεν υπάρχουν στο session state
-if "messages" not in st.session_state:
-    st.session_state.messages = load_chat_history(st.session_state.current_chat)
-
-# Εμφάνιση προηγούμενων μηνυμάτων
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
-# Είσοδος νέου μηνύματος από τον χρήστη
-if user_input := st.chat_input("Type your message here..."):
-    
-    # Εμφάνιση του μηνύματος του χρήστη
-    with st.chat_message("user"):
-        st.write(user_input)
-    
-    # Αποθήκευση στο ιστορικό
-    is_first_message = (len(st.session_state.messages) == 0)
-    st.session_state.messages.append({"role": "user", "content": user_input})
-    
-    # Προετοιμασία των μηνυμάτων για το API (συμπεριλαμβανομένου του System Prompt)
-    api_messages = [{"role": "system", "content": system_prompts[selected_persona]}]
-    
-    # Αν η αναζήτηση είναι ενεργή, φέρε αποτελέσματα και εμπλούτισε το prompt
-    if web_search_enabled:
-        with st.spinner("Searching the web..."):
-            search_results = search_web(user_input)
-            augmented_input = f"Web Search Results:\n{search_results}\n\nUser Question: {user_input}"
-            api_messages.append({"role": "user", "content": augmented_input})
-    else:
-        # Αλλιώς βάλε το ιστορικό
-        for msg in st.session_state.messages:
-            api_messages.append(msg)
-
-    # Κλήση στο Groq API
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            try:
-                response = client.chat.completions.create(
-                    model=selected_model,
-                    messages=api_messages
-                )
-                assistant_response = response.choices[0].message.content
-                st.write(assistant_response)
-                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
-                
-                # Αποθήκευση/Μετονομασία μετά την επιτυχή απάντηση
-                if is_first_message:
-                    new_id = rename_chat_file(st.session_state.current_chat, user_input, selected_model, st.session_state.messages)
-                    st.session_state.current_chat = new_id
-                else:
-                    save_chat_history(st.session_state.current_chat, st.session_state.messages)
-                    
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error calling Groq API: {str(e)}")
+        
