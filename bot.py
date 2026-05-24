@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 import urllib.parse
 import re
+from duckduckgo_search import DDGS
 
 # Φάκελος για την αποθήκευση όλων των συνομιλιών
 CHATS_DIR = "chats"
@@ -68,56 +69,14 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
         os.rename(old_file, new_file)
     return new_title
 
-# Σταθερή αναζήτηση μέσω DuckDuckGo HTML
 def search_web(query, max_results=5):
     try:
-        context_list = []
-        formatted_query = urllib.parse.quote_plus(query)
-        
-        # Χρήση της text-based έκδοσης του DuckDuckGo που είναι ελαφριά και δεν μπλοκάρει
-        url = f"https://duckduckgo.com{formatted_query}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "el-GR,el;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
-        
-        # Αποστολή αιτήματος με αυξημένο timeout
-        response = requests.get(url, headers=headers, timeout=12)
-        if response.status_code != 200:
-            return "Error: Unable to fetch search results."
-            
-        soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Εντοπισμός των blocks αποτελεσμάτων στην HTML δομή
-        results = soup.find_all('div', class_='result')
-        
-        for res in results[:max_results]:
-            title_element = res.find('a', class_='result__url')
-            snippet_element = res.find('a', class_='result__snippet')
-            
-            if title_element:
-                title = title_element.get_text(strip=True)
-                raw_url = title_element.get('href', '')
-                
-                # Καθαρισμός του URL από τα εσωτερικά ανακατευθύνσεις (redirects) του DuckDuckGo
-                if "uddg=" in raw_url:
-                    clean_url = urllib.parse.unquote(raw_url.split("uddg=")[1].split("&")[0])
-                else:
-                    clean_url = raw_url
-                    
-                snippet = snippet_element.get_text(strip=True) if snippet_element else ""
-                
-                if title and clean_url:
-                    context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
-                    
-        if context_list:
-            return "\n\n".join(context_list)
-            
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=max_results)]
+            if results:
+                return "\n\n".join([f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}" for r in results])
     except Exception as e:
         return f"Error during search: {str(e)}"
-    
     return "No results found."
 
 # Ρύθμιση σελίδας
