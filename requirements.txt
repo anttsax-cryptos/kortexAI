@@ -1,7 +1,5 @@
 streamlit
 groq
-googlesearch-python
 supabase
 streamlit
-groq
-googlesearch-python
+duckduckgo-search
