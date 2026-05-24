@@ -171,15 +171,15 @@ def search_google(query, max_results=5):
     return ""
 
 # Ρύθμιση σελίδας
-st.set_page_config(page_title="kortexAI", layout="wide", page_icon="🤖")
-st.title("🤖 kortexAI Chatbot")
+st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
+st.title("🤖 StrictexAI Chatbot")
 
 # Αρχικά system prompts προσαρμοσμένα στο όνομα του bot
 system_prompts = {
-    "Friendly Assistant": "You are kortexAI, a helpful, polite, and kind AI assistant.",
-    "Expert Programmer": "You are kortexAI, an elite senior software engineer. Give precise, clean code blocks.",
-    "Creative Storyteller": "You are kortexAI, a whimsical author. Answer with creative flair.",
-    "Sarcastic Buddy": "You are kortexAI, a witty, slightly sarcastic friend. Use humor."
+    "Friendly Assistant": "You are StricexAI, a helpful, polite, and kind AI assistant.",
+    "Expert Programmer": "You are StrictexAI, an elite senior software engineer. Give precise, clean code blocks.",
+    "Creative Storyteller": "You are StrictexAI, a whimsical author. Answer with creative flair.",
+    "Sarcastic Buddy": "You are StrictexAI, a witty, slightly sarcastic friend. Use humor."
 }
 
 # --- 1. SIDEBAR ---
@@ -287,7 +287,7 @@ if user_input := st.chat_input("Type your message here..."):
 """
             message_placeholder.markdown(full_response)
         elif any(q in clean_input for q in creator_questions):
-            full_response = "I am kortexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Groq Cloud."
+            full_response = "I am StrictexAI, made by Antonis Tsachpinis! A custom AI chatbot powered by Streamlit and Groq Cloud."
             message_placeholder.markdown(full_response)
         else:
             full_response = ""
