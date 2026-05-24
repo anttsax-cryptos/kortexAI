@@ -167,7 +167,7 @@ with st.sidebar:
     st.header("⚙️ Bot Configurations")
     selected_model = st.selectbox("Choose Model:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"], index=0)
     personality = st.selectbox("Bot Personality:", list(system_prompts.keys()))
-    web_search_enabled = st.toggle("🌐 Enable Internet Search", value=False)
+    web_search_enabled = st.toggle("🌐 Enable Internet Search", value=True)
     st.divider()
     
     if st.button("🗑️ Delete Current Chat", use_container_width=True):
