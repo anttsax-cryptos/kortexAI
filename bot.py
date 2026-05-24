@@ -55,7 +55,7 @@ def load_chat_history(user_email, chat_id):
         response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
         records = response.data if hasattr(response, 'data') else response
         if records and len(records) > 0:
-            return records[0]["messages"] # Επιστροφή των μηνυμάτων της πρώτης εγγραφής
+            return records[0]["messages"]
     except Exception as e:
         st.error(f"Error loading chat: {e}")
     return []
