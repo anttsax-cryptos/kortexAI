@@ -73,78 +73,43 @@ def search_web(query, max_results=5):
     try:
         context_list = []
         formatted_query = urllib.parse.quote_plus(query)
-        # Χρήση της σταθερής HTML έκδοσης
+        
+        # Χρήση της text-based έκδοσης του DuckDuckGo που είναι ελαφριά και δεν μπλοκάρει
         url = f"https://duckduckgo.com{formatted_query}"
         
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             "Accept-Language": "el-GR,el;q=0.9,en-US;q=0.8,en;q=0.7"
         }
         
-        # Αύξηση του timeout στα 15 δευτερόλεπτα για να αποφευχθούν τα πρόωρα timeouts
-        response = requests.get(url, headers=headers, timeout=15)
+        # Αποστολή αιτήματος με αυξημένο timeout
+        response = requests.get(url, headers=headers, timeout=12)
         if response.status_code != 200:
-            return f"Error: Received status code {response.status_code}"
+            return "Error: Unable to fetch search results."
             
         soup = BeautifulSoup(response.text, "html.parser")
-        # Σωστός selector για τα αποτελέσματα της DuckDuckGo HTML
-        result_elements = soup.select(".links_main.links_deep")
         
-        for element in result_elements[:max_results]:
-            title_tag = element.select_one(".result__title a")
-            snippet_tag = element.select_one(".result__snippet")
-            
-            if title_tag:
-                title = title_tag.get_text(strip=True)
-                raw_url = title_tag.get("href", "")
-                
-                # Αποκωδικοποίηση και καθαρισμός του URL από τα redirects της DuckDuckGo
-                parsed_url = urllib.parse.urlparse(raw_url)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                
-                # ΔΙΟΡΘΩΣΗ: Παίρνουμε το string [0] αντί για ολόκληρη τη λίστα
-                clean_url = query_params.get("uddg", [raw_url])[0]
-                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
-                
-                context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
-                
-        if context_list:
-            return "\n\n".join(context_list)
-            
-    except Exception as e:
-        return f"Error during search: {str(e)}"
-    return "No results found."
-
-    try:
-        context_list = []
-        # Χρήση του επίσημου, δωρεάν Lite API της DuckDuckGo (JSON μορφή)
-        url = f"https://duckduckgo.com{urllib.parse.quote_plus(query)}&format=json&no_html=1&skip_disambig=1"
+        # Εντοπισμός των blocks αποτελεσμάτων στην HTML δομή
+        results = soup.find_all('div', class_='result')
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
-        
-        response = requests.get(url, headers=headers, timeout=8)
-        if response.status_code != 200:
-            return "No results found due to connection status."
+        for res in results[:max_results]:
+            title_element = res.find('a', class_='result__url')
+            snippet_element = res.find('a', class_='result__snippet')
             
-        data = response.json()
-        
-        # 1. Έλεγχος για άμεση απάντηση (Abstract)
-        if data.get("AbstractText"):
-            title = data.get("Heading", "Abstract")
-            source_url = data.get("AbstractURL", "")
-            snippet = data.get("AbstractText")
-            context_list.append(f"Title: {title}\nURL: {source_url}\nSnippet: {snippet}")
-            
-        # 2. Έλεγχος για σχετικά αποτελέσματα (Related Topics)
-        if "RelatedTopics" in data:
-            for result in data["RelatedTopics"][:max_results]:
-                # Παράκαμψη υποκατηγοριών (Topics)
-                if "FirstURL" in result and "Text" in result:
-                    title = result.get("Text", "").split(" - ")[0]
-                    clean_url = result.get("FirstURL", "")
-                    snippet = result.get("Text", "")
+            if title_element:
+                title = title_element.get_text(strip=True)
+                raw_url = title_element.get('href', '')
+                
+                # Καθαρισμός του URL από τα εσωτερικά ανακατευθύνσεις (redirects) του DuckDuckGo
+                if "uddg=" in raw_url:
+                    clean_url = urllib.parse.unquote(raw_url.split("uddg=")[1].split("&")[0])
+                else:
+                    clean_url = raw_url
+                    
+                snippet = snippet_element.get_text(strip=True) if snippet_element else ""
+                
+                if title and clean_url:
                     context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
                     
         if context_list:
@@ -152,44 +117,7 @@ def search_web(query, max_results=5):
             
     except Exception as e:
         return f"Error during search: {str(e)}"
-    return "No results found."
-
-    try:
-        context_list = []
-        formatted_query = urllib.parse.quote_plus(query)
-        url = f"https://html.duckduckgo.com/html/?q={formatted_query}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return f"Error: Received status code {response.status_code}"
-            
-        soup = BeautifulSoup(response.text, "html.parser")
-        result_elements = soup.select("#links .result")
-        
-        for element in result_elements[:max_results]:
-            title_tag = element.select_one(".result__title a")
-            snippet_tag = element.select_one(".result__snippet")
-            
-            if title_tag:
-                title = title_tag.get_text(strip=True)
-                raw_url = title_tag.get("href", "")
-                parsed_url = urllib.parse.urlparse(raw_url)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                
-                clean_url = query_params.get("uddg", [raw_url])[0]
-                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
-                
-                context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
-                
-        if context_list:
-            return "\n\n".join(context_list)
-            
-    except Exception as e:
-        return f"Error during search: {str(e)}"
+    
     return "No results found."
 
 # Ρύθμιση σελίδας
