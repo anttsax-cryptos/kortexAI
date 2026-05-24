@@ -3,7 +3,10 @@ import json
 import os
 import datetime
 from groq import Groq 
-from duckduckgo_search import DDGS 
+from duckduckgo_search import DDGS
+import urllib.request
+import re
+from bs4 import BeautifulSoup 
 
 # Φάκελος για την αποθήκευση όλων των συνομιλιών
 CHATS_DIR = "chats"
@@ -70,8 +73,44 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
         os.rename(old_file, new_file)
     return new_title
 
-# Συνάρτηση για αναζήτηση στο DuckDuckGo (Διορθωμένη παράμετρος)
-def search_ddg(query, max_results=5):
+# Σταθερή αναζήτηση Google χωρίς μπλοκάρισμα (μέσω Google HTML Search)
+def search_google(query, max_results=5):
+    try:
+        context_list = []
+        # Μορφοποίηση του query για το URL
+        formatted_query = query.replace(' ', '+')
+        url = f"https://duckduckgo.com{formatted_query}"
+        
+        # Προσποίηση κανονικού browser για να μην υπάρχει μπλοκάρισμα
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        
+        html = urllib.request.urlopen(req).read()
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Εντοπισμός των αποτελεσμάτων στην καθαρή HTML σελίδα
+        links = soup.find_all('a', class_='result__url')
+        snippets = soup.find_all('td', class_='result__snippet')
+        titles = soup.find_all('a', class_='result__snippet') # Εναλλακτικό για titles
+        
+        for i in range(min(max_results, len(links))):
+            link_href = links[i].get('href', '')
+            # Καθαρισμός του DDG redirect URL για να πάρουμε το καθαρό link
+            clean_url = re.search(r'uddg=(.*?)&', link_href)
+            final_url = urllib.parse.unquote(clean_url.group(1)) if clean_url else link_href
+            
+            snippet_text = snippets[i].get_text().strip() if i < len(snippets) else ""
+            
+            context_list.append(f"Source Link: {final_url}\nInformation: {snippet_text}")
+            
+        if context_list:
+            return "\n\n".join(context_list)
+    except Exception as e:
+        return f"Error during search: {str(e)}"
+    return ""
+
     try:
         context_list = []
         with DDGS() as ddgs:
@@ -161,8 +200,8 @@ if user_input := st.chat_input("Type your message here..."):
     st.session_state.messages.insert(0, {"role": "system", "content": system_prompts[personality]})
     
     if web_search_enabled:
-        with st.spinner("🔍 Searching The Internet..."):
-            search_results = search_ddg(user_input)  
+        with st.spinner("🔍 Searching The ..."):
+            search_results = search_google(user_input)  # <-- Καλεί τη νέα συνάρτηση
             if search_results:
                 web_prompt = (
                     "You are a helpful assistant with access to real-time web search results.\n"
