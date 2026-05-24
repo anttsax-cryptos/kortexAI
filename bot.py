@@ -74,42 +74,26 @@ def search_web(query, max_results=5):
         context_list = []
         formatted_query = urllib.parse.quote_plus(query)
         
-        # Χρήση εναλλακτικού API (DuckDuckGo Lite JSON) που δεν ζητάει Captchas
-        url = f"https://duckduckgo.com{formatted_query}&format=json&no_html=1&skip_disambig=1"
+        # Χρήση του Open Search API της Wikipedia (100% ελεύθερο και σταθερό)
+        url = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
         
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "StrictexAIChatbot/1.0 (contact@example.com)"
         }
         
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             data = response.json()
             
-            # Αν υπάρχει άμεση απάντηση/περίληψη, τη βάζουμε πρώτη
-            if data.get("AbstractText"):
-                context_list.append(f"Title: {data.get('Heading')}\nURL: {data.get('AbstractURL')}\nSnippet: {data.get('AbstractText')}")
-            
-            # Αν υπάρχουν σχετικά θέματα
-            if "RelatedTopics" in data:
-                for topic in data["RelatedTopics"][:max_results]:
-                    if "FirstURL" in topic and "Text" in topic:
-                        context_list.append(f"Title: Result\nURL: {topic['FirstURL']}\nSnippet: {topic['Text']}")
-
-        # FALLBACK: Αν το DuckDuckGo δεν δώσει αποτελέσματα για το νέο μοντέλο, 
-        # χρησιμοποιούμε το Wikipedia API που επιτρέπεται παντού και δεν μπλοκάρει ΠΟΤΕ.
-        if not context_list:
-            wiki_url = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
-            wiki_response = requests.get(wiki_url, headers=headers, timeout=8)
-            if wiki_response.status_code == 200:
-                wiki_data = wiki_response.json()
-                # Το API της Wikipedia επιστρέφει [query, [titles], [snippets], [urls]]
-                if len(wiki_data) >= 4:
-                    titles = wiki_data[1]
-                    snippets = wiki_data[2]
-                    urls = wiki_data[3]
-                    for i in range(len(titles)):
-                        context_list.append(f"Title: {titles[i]}\nURL: {urls[i]}\nSnippet: {snippets[i]}")
-
+            # Η Wikipedia επιστρέφει: [query, [titles], [descriptions], [urls]]
+            if len(data) >= 4:
+                titles = data[1]
+                descriptions = data[2]
+                urls = data[3]
+                
+                for i in range(len(titles)):
+                    context_list.append(f"Title: {titles[i]}\nURL: {urls[i]}\nSnippet: {descriptions[i]}")
+                    
         if context_list:
             return "\n\n".join(context_list)
             
