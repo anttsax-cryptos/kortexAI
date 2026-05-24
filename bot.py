@@ -52,7 +52,6 @@ def load_chat_history(user_email, chat_id):
         response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
         records = response.data if hasattr(response, 'data') else response
         if records and len(records) > 0:
-            # ΔΙΟΡΘΩΣΗ: Παίρνουμε τα μηνύματα από το 1ο λεξικό της λίστας
             user_chat_data = records[0]
             return user_chat_data.get("messages", [])
     except Exception as e:
@@ -70,6 +69,14 @@ def save_chat_history(user_email, chat_id, messages):
     except Exception as e:
         st.error(f"Error saving chat: {e}")
 
+def delete_chat_from_db(user_email, chat_id):
+    try:
+        supabase.table("user_chats").delete().eq("username", user_email).eq("chat_id", chat_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error deleting chat: {e}")
+        return False
+
 def rename_chat_file(user_email, old_chat_id, user_input, selected_model, messages):
     new_title = "Saved Chat"
     try:
@@ -78,7 +85,7 @@ def rename_chat_file(user_email, old_chat_id, user_input, selected_model, messag
             model=selected_model,
             messages=[{"role": "user", "content": rename_prompt}]
         )
-        new_title = title_response.choices.message.content.strip().replace('"', '').replace('.', '')
+        new_title = title_response.choices[0].message.content.strip().replace('"', '').replace('.', '')
         new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
     except Exception:
         pass
@@ -115,7 +122,7 @@ def search_web(query, max_results=5):
                     raw_url = title_tag.get("href", "")
                     parsed_url = urllib.parse.urlparse(raw_url)
                     query_params = urllib.parse.parse_qs(parsed_url.query)
-                    clean_url = query_params.get("uddg", [raw_url])
+                    clean_url = query_params.get("uddg", [raw_url])[0]
                     snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
                     context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
             if context_list:
@@ -144,7 +151,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     records = response.data if hasattr(response, 'data') else response
                     
                     if records and len(records) > 0:
-                        user_data = records[0]  # ΔΙΟΡΘΩΣΗ: Παίρνουμε το 1ο λεξικό της λίστας
+                        user_data = records[0]
                         stored_password = user_data.get("password")
                         
                         if Hasher.check_pw(login_password, stored_password):
@@ -180,7 +187,7 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
                     if existing_records and len(existing_records) > 0:
                         st.error("❌ Αυτό το email χρησιμοποιείται ήδη.")
                     else:
-                        hashed_password = Hasher.hash(new_password)
+                        hashed_password = Hasher.hash_password(new_password)
                         supabase.table("app_users").insert({
                             "email": new_email,
                             "password": hashed_password
@@ -204,9 +211,3 @@ system_prompts = {
 # --- 3. SIDEBAR (Ιστορικό & Όλες οι Ρυθμίσεις) ---
 with st.sidebar:
     st.write(f"📧 Connected as: **{current_user}**")
-    if st.button("🚪 Αποσύνδεση (Logout)", use_container_width=True):
-        st.session_state["authenticated"] = False
-        st.session_state["username"] = None
-        st.rerun()
-        
-    st.divider()
