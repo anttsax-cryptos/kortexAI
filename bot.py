@@ -71,7 +71,7 @@ def rename_chat_file(old_chat_id, user_input, selected_model, messages):
     return new_title
 
 # Συνάρτηση για αναζήτηση στο DuckDuckGo
-def search_ddg(query, max_results=3):
+def search_ddg(query, max_results=6):
     try:
         context_list = []
         with DDGS() as ddgs:
@@ -166,9 +166,13 @@ if user_input := st.chat_input("Type your message here..."):
             search_results = search_ddg(user_input)  
 
             if search_results:
-                web_prompt = (
-                    "CRITICAL INSTRUCTION: Use ONLY these live Google results. Current year is 2026.\n"
-                    f"Results:\n{search_results}"
+               web_prompt = (
+                     "You are a helpful assistant with access to real-time web search results.\n"
+                     "Synthesize the following search results to answer the user's query accurately. "
+                     "If the search results don't contain the full answer, use your pre-trained knowledge as well.\n"
+                    f"Current year is 2026.\n\nSearch Results:\n{search_results}"
+)
+
                 )
                 st.session_state.messages.append({"role": "system", "content": web_prompt, "is_search_context": True})
         
