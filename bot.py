@@ -213,3 +213,4 @@ with st.sidebar:
     st.divider()
     st.header("💬 Chat History")
     if st.button("➕ New Chat", use_container_width=True):
+        
