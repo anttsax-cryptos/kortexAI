@@ -7,78 +7,42 @@ import requests
 from bs4 import BeautifulSoup
 import urllib.parse
 import re
-import streamlit_authenticator as stauth
-from streamlit_authenticator.utilities.hasher import Hasher
-from supabase import create_client, Client
 
-# Ρύθμιση σελίδας
-st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
+# Φάκελος για την αποθήκευση όλων των συνομιλιών
+CHATS_DIR = "chats"
+if not os.path.exists(CHATS_DIR):
+    os.makedirs(CHATS_DIR)
 
-# Έλεγχος αν υπάρχουν τα απαραίτητα Secrets
-if "SUPABASE_URL" not in st.secrets or "SUPABASE_KEY" not in st.secrets:
-    st.error("⚠️ Παρακαλώ προσθέστε τα SUPABASE_URL και SUPABASE_KEY στα Streamlit Secrets!")
-    st.stop()
-
+# 1. Έλεγχος API Key στα Secrets του Streamlit
 if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠️ Παρακαλώ προσθέστε το GROQ_API_KEY στα Streamlit Secrets!")
     st.stop()
 
-# --- ΑΠΟΛΥΤΟΣ ΚΑΘΑΡΙΣΜΟΣ URL ΓΙΑ ΤΗΝ ΑΠΟΦΥΓΗ ΤΟΥ PGRST125 ---
-supabase_url = st.secrets["SUPABASE_URL"].strip().strip('"').strip("'")
-if supabase_url.endswith("/"):
-    supabase_url = supabase_url[:-1]
-if supabase_url.endswith("/rest/v1"):
-    supabase_url = supabase_url.replace("/rest/v1", "")
-
-supabase_key = st.secrets["SUPABASE_KEY"].strip().strip('"').strip("'")
-
-# Αρχικοποίηση των Clients
-supabase: Client = create_client(supabase_url, supabase_key)
+# 2. Αρχικοποίηση του Groq Client
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-# ---------------------------------------------------
 
-# --- ΣΥΝΑΡΤΗΣΕΙΣ ΔΙΑΧΕΙΡΙΣΗΣ ΣΥΝΟΜΙΛΙΩΝ (SUPABASE) ---
-def get_all_chats(user_email):
-    try:
-        response = supabase.table("user_chats").select("chat_id").eq("username", user_email).order("updated_at", descending=True).execute()
-        records = response.data if hasattr(response, 'data') else response
-        return [row["chat_id"] for row in records] if records else []
-    except Exception as e:
-        st.error(f"Error fetching chats: {e}")
+# Συναρτήσεις για διαχείριση πολλαπλών αρχείων συνομιλιών
+def get_all_chats():
+    if not os.path.exists(CHATS_DIR):
         return []
+    files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
+    files.sort(key=lambda x: os.path.getmtime(os.path.join(CHATS_DIR, x)), reverse=True)
+    return [os.path.splitext(f)[0] for f in files]
 
-def load_chat_history(user_email, chat_id):
-    try:
-        response = supabase.table("user_chats").select("messages").eq("username", user_email).eq("chat_id", chat_id).execute()
-        records = response.data if hasattr(response, 'data') else response
-        if records and len(records) > 0:
-            user_chat_data = records[0]
-            return user_chat_data.get("messages", [])
-    except Exception as e:
-        st.error(f"Error loading chat: {e}")
+def load_chat_history(chat_id):
+    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
     return []
 
-def save_chat_history(user_email, chat_id, messages):
-    try:
-        check = supabase.table("user_chats").select("id").eq("username", user_email).eq("chat_id", chat_id).execute()
-        records = check.data if hasattr(check, 'data') else check
-        if records and len(records) > 0:
-            supabase.table("user_chats").update({"messages": messages, "updated_at": "now()"}).eq("username", user_email).eq("chat_id", chat_id).execute()
-        else:
-            supabase.table("user_chats").insert({"username": user_email, "chat_id": chat_id, "messages": messages}).execute()
-    except Exception as e:
-        st.error(f"Error saving chat: {e}")
+def save_chat_history(chat_id, messages):
+    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(messages, f, ensure_ascii=False, indent=4)
 
-def delete_chat_from_db(user_email, chat_id):
-    try:
-        supabase.table("user_chats").delete().eq("username", user_email).eq("chat_id", chat_id).execute()
-        return True
-    except Exception as e:
-        st.error(f"Error deleting chat: {e}")
-        return False
-
-def rename_chat_file(user_email, old_chat_id, user_input, selected_model, messages):
-    new_title = "Saved Chat"
+# Αυτοματοποιημένη μετονομασία αρχείου συνομιλίας με δομή Groq
+def rename_chat_file(old_chat_id, user_input, selected_model, messages):
     try:
         rename_prompt = f"Summarize this in 2 words: {user_input}"
         title_response = client.chat.completions.create(
@@ -88,119 +52,67 @@ def rename_chat_file(user_email, old_chat_id, user_input, selected_model, messag
         new_title = title_response.choices[0].message.content.strip().replace('"', '').replace('.', '')
         new_title = "".join(c for c in new_title if c.isalnum() or c in " _-").strip()
     except Exception:
-        pass
+        new_title = "Saved Chat"
         
     if not new_title:
         new_title = "Saved Chat"
         
-    if new_title in get_all_chats(user_email):
+    if new_title in get_all_chats():
         new_title += f"_{datetime.datetime.now().strftime('%H%M%S')}"
         
-    try:
-        supabase.table("user_chats").update({"chat_id": new_title, "messages": messages, "updated_at": "now()"}).eq("username", user_email).eq("chat_id", old_chat_id).execute()
-    except Exception as e:
-        st.error(f"Error renaming chat: {e}")
+    old_file = os.path.join(CHATS_DIR, f"{old_chat_id}.json")
+    new_file = os.path.join(CHATS_DIR, f"{new_title}.json")
+    
+    save_chat_history(old_chat_id, messages)
+    if os.path.exists(old_file):
+        os.rename(old_file, new_file)
     return new_title
 
-# --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WEB ---
+# Σταθερή αναζήτηση μέσω DuckDuckGo HTML
 def search_web(query, max_results=5):
     try:
         context_list = []
         formatted_query = urllib.parse.quote_plus(query)
-        url = f"https://duckduckgo.com{formatted_query}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        url = f"https://html.duckduckgo.com/html/?q={formatted_query}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
         
         response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            result_elements = soup.select("#links .result")
-            for element in result_elements[:max_results]:
-                title_tag = element.select_one(".result__title a")
-                snippet_tag = element.select_one(".result__snippet")
-                if title_tag:
-                    title = title_tag.get_text(strip=True)
-                    raw_url = title_tag.get("href", "")
-                    parsed_url = urllib.parse.urlparse(raw_url)
-                    query_params = urllib.parse.parse_qs(parsed_url.query)
-                    clean_url = query_params.get("uddg", [raw_url])[0]
-                    snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
-                    context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
-            if context_list:
-                return "\n\n".join(context_list)
+        if response.status_code != 200:
+            return f"Error: Received status code {response.status_code}"
+            
+        soup = BeautifulSoup(response.text, "html.parser")
+        result_elements = soup.select("#links .result")
+        
+        for element in result_elements[:max_results]:
+            title_tag = element.select_one(".result__title a")
+            snippet_tag = element.select_one(".result__snippet")
+            
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+                raw_url = title_tag.get("href", "")
+                parsed_url = urllib.parse.urlparse(raw_url)
+                query_params = urllib.parse.parse_qs(parsed_url.query)
+                
+                clean_url = query_params.get("uddg", [raw_url])[0]
+                snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                
+                context_list.append(f"Title: {title}\nURL: {clean_url}\nSnippet: {snippet}")
+                
+        if context_list:
+            return "\n\n".join(context_list)
+            
     except Exception as e:
         return f"Error during search: {str(e)}"
     return "No results found."
 
-
-# --- 2. ΣΥΣΤΗΜΑ AUTHENTICATION (ΜΟΝΟ EMAIL & PASSWORD) ---
-if "authenticated" not in st.session_state or not st.session_state["authenticated"]:
-    st.title("🤖 StrictexAI - Welcome")
-    tab1, tab2 = st.tabs(["🔑 Είσοδος (Sign In)", "📝 Εγγραφή (Sign Up)"])
-
-    with tab1:
-        st.subheader("Σύνδεση με το Email σας")
-        login_email = st.text_input("E-mail", key="login_email").strip().lower()
-        login_password = st.text_input("Password", type="password", key="login_pass")
-        
-        if st.button("Σύνδεση", use_container_width=True):
-            if not login_email or not login_password:
-                st.warning("⚠️ Παρακαλώ συμπληρώστε όλα τα πεδία.")
-            else:
-                try:
-                    response = supabase.table("app_users").select("*").eq("email", login_email).execute()
-                    records = response.data if hasattr(response, 'data') else response
-                    
-                    if records and len(records) > 0:
-                        user_data = records[0]
-                        stored_password = user_data.get("password")
-                        
-                        if Hasher.check_pw(login_password, stored_password):
-                            st.session_state["authenticated"] = True
-                            st.session_state["username"] = login_email
-                            st.success("Successful Login!")
-                            st.rerun()
-                        else:
-                            st.error("❌ Λάθος κωδικός πρόσβασης.")
-                    else:
-                        st.error("❌ Αυτό το email δεν είναι εγγεγραμμένο.")
-                except Exception as db_err:
-                    st.error(f"Σφάλμα κατά τη σύνδεση: {str(db_err)}")
-
-    with tab2:
-        st.subheader("Δημιουργία Νέου Λογαριασμού")
-        new_email = st.text_input("Το E-mail σας", key="new_email").strip().lower()
-        new_password = st.text_input("Επιλέξτε Password", type="password", key="new_pass")
-        confirm_password = st.text_input("Επιβεβαίωση Password", type="password", key="conf_pass")
-        
-        if st.button("Δημιουργία Λογαριασμού", use_container_width=True):
-            if not new_email or not new_password or not confirm_password:
-                st.warning("⚠️ Παρακαλώ συμπληρώστε όλα τα πεδία.")
-            elif not re.match(r"[^@]+@[^@]+\.[^@]+", new_email):
-                st.error("❌ Παρακαλώ εισάγετε μια έγκυρη διεύθυνση email.")
-            elif new_password != confirm_password:
-                st.error("❌ Οι κωδικοί δεν ταιριάζουν.")
-            else:
-                try:
-                    check_user = supabase.table("app_users").select("email").eq("email", new_email).execute()
-                    existing_records = check_user.data if hasattr(check_user, 'data') else check_user
-                    
-                    if existing_records and len(existing_records) > 0:
-                        st.error("❌ Αυτό το email χρησιμοποιείται ήδη.")
-                    else:
-                        hashed_password = Hasher.hash_password(new_password)
-                        supabase.table("app_users").insert({
-                            "email": new_email,
-                            "password": hashed_password
-                        }).execute()
-                        st.success("🎉 Ο λογαριασμός δημιουργήθηκε! Μπορείτε να συνδεθείτε στο πρώτο Tab.")
-                except Exception as e:
-                    st.error(f"Σφάλμα κατά την εγγραφή: {e}")
-    st.stop()
-
-# --- ΑΠΟ ΕΔΩ ΚΑΙ ΠΕΡΑ Ο ΧΡΗΣΤΗΣ ΕΧΕΙ ΣΥΝΔΕΘΕΙ ---
-current_user = st.session_state["username"]
+# Ρύθμιση σελίδας
+st.set_page_config(page_title="StrictexAI", layout="wide", page_icon="🤖")
 st.title("🤖 StrictexAI Chatbot")
 
+# Αρχικά system prompts
 system_prompts = {
     "Friendly Assistant": "You are StrictexAI, a helpful, polite, and kind AI assistant.",
     "Expert Programmer": "You are StrictexAI, an elite senior software engineer. Give precise, clean code blocks.",
@@ -208,6 +120,93 @@ system_prompts = {
     "Sarcastic Buddy": "You are StrictexAI, a witty, slightly sarcastic friend. Use humor."
 }
 
-# --- 3. SIDEBAR (Ιστορικό & Όλες οι Ρυθμίσεις) ---
+# --- 1. SIDEBAR (Διαχείριση Ιστορικού) ---
 with st.sidebar:
-    st.write(f"📧 Connected as: **{current_user}**")
+    st.header("💬 Chat History")
+    
+    if st.button("➕ New Chat", use_container_width=True):
+        new_chat_id = f"New Chat {datetime.datetime.now().strftime('%H%M%S')}"
+        st.session_state.current_chat = new_chat_id
+        st.session_state.messages = []
+        st.rerun()
+    
+    st.divider()
+    saved_chats = get_all_chats()
+    
+    if "current_chat" not in st.session_state:
+        if saved_chats:
+            st.session_state.current_chat = saved_chats[0]
+        else:
+            st.session_state.current_chat = f"New Chat {datetime.datetime.now().strftime('%H%M%S')}"
+
+    for chat in saved_chats:
+        label = f"📝 {chat}" if chat != st.session_state.current_chat else f"💬 {chat} (Active)"
+        if st.button(label, key=chat, use_container_width=True):
+            st.session_state.current_chat = chat
+            st.session_state.messages = load_chat_history(chat)
+            st.rerun()
+            
+    st.divider()
+    
+    # Επιλογή Μοντέλου και Persona μέσα στο Sidebar
+    selected_model = st.selectbox("🤖 Choose Model", ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768"])
+    selected_persona = st.selectbox("🎭 Choose Persona", list(system_prompts.keys()))
+    web_search_enabled = st.toggle("🌐 Enable Web Search", value=False)
+
+# --- 2. ΚΥΡΙΩΣ ΠΕΡΙΕΧΟΜΕΝΟ (Chat Interface) ---
+# Φόρτωση μηνυμάτων αν δεν υπάρχουν στο session state
+if "messages" not in st.session_state:
+    st.session_state.messages = load_chat_history(st.session_state.current_chat)
+
+# Εμφάνιση προηγούμενων μηνυμάτων
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+
+# Είσοδος νέου μηνύματος από τον χρήστη
+if user_input := st.chat_input("Type your message here..."):
+    
+    # Εμφάνιση του μηνύματος του χρήστη
+    with st.chat_message("user"):
+        st.write(user_input)
+    
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    
+    # Προετοιμασία των μηνυμάτων για το API (συμπεριλαμβανομένου του System Prompt)
+    api_messages = [{"role": "system", "content": system_prompts[selected_persona]}]
+    
+    # Αν η αναζήτηση είναι ενεργή, φέρε αποτελέσματα και εμπλούτισε το prompt
+    if web_search_enabled:
+        with st.spinner("Searching the web..."):
+            search_results = search_web(user_input)
+            augmented_input = f"Web Search Results:\n{search_results}\n\nUser Question: {user_input}"
+            api_messages.append({"role": "user", "content": augmented_input})
+    else:
+        # Αλλιώς βάλε το ιστορικό
+        for msg in st.session_state.messages:
+            api_messages.append(msg)
+
+    # Κλήση στο Groq API
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                response = client.chat.completions.create(
+                    model=selected_model,
+                    messages=api_messages
+                )
+                assistant_response = response.choices[0].message.content
+                st.write(assistant_response)
+                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+            except Exception as e:
+                st.error(f"Error calling Groq API: {str(e)}")
+                assistant_response = None
+
+    # Αν είναι το πρώτο μήνυμα, κάνε αυτόματη μετονομασία του αρχείου chat
+    if assistant_response and len(st.session_state.messages) <= 3 and st.session_state.current_chat.startswith("New Chat"):
+        old_id = st.session_state.current_chat
+        new_id = rename_chat_file(old_id, user_input, selected_model, st.session_state.messages)
+        st.session_state.current_chat = new_id
+        st.rerun()
+    else:
+        # Αλλιώς απλά αποθήκευσε τη συνομιλία
+        save_chat_history(st.session_state.current_chat, st.session_state.messages)
