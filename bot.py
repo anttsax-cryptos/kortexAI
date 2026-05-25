@@ -5,6 +5,7 @@ import datetime
 import requests
 import urllib.parse
 from groq import Groq
+from duckduckgo_search import DDGS
 
 # --- 1. CONFIGURATION ΣΕΛΙΔΑΣ ---
 st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
@@ -51,54 +52,22 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΠΛΗΡΕΣ ΚΕΙΜΕΝΟ ΑΡΘΡΟΥ - ΔΙΟΡΘΩΜΕΝΗ) ---
-def search_wikipedia(query, max_characters=2000):
-    # Καθαρισμός του query από περιττές φράσεις
-    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για"]
-    clean_query = query.lower()
-    for word in stop_words:
-        clean_query = clean_query.replace(word, "")
-    clean_query = clean_query.strip()
-
-    formatted_query = urllib.parse.quote_plus(clean_query)
-    headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
-    
-    # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en)
-    for lang in ["el", "en"]:
-        try:
-            # Βήμα 1: Αναζήτηση για να βρούμε τον ακριβή τίτλο του άρθρου
-            search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
-            search_response = requests.get(search_url, headers=headers, timeout=5)
-            
-            if search_response.status_code == 200:
-                search_data = search_response.json()
-                results = search_data.get("query", {}).get("search", [])
-                
-                if not results:
-                    continue
-                
-                # ΔΙΟΡΘΩΣΗ: Παίρνουμε το πρώτο στοιχείο [0] της λίστας των αποτελεσμάτων
-                exact_title = results[0]["title"]
-                formatted_title = urllib.parse.quote_plus(exact_title)
-                
-                # Βήμα 2: Λήψη ολόκληρου του κειμένου (extract) του άρθρου
-                content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
-                content_response = requests.get(content_url, headers=headers, timeout=5)
-                
-                if content_response.status_code == 200:
-                    content_data = content_response.json()
-                    pages = content_data.get("query", {}).get("pages", {})
-                    
-                    for page_id, page_info in pages.items():
-                        extract = page_info.get("extract", "")
-                        if extract.strip():
-                            if len(extract) > max_characters:
-                                extract = extract[:max_characters] + "..."
-                            return f"[{lang.upper()}] Τίτλος: {exact_title}\nΠληροφορία: {extract}"
-        except Exception:
-            continue
-            
-    return None
+# --- 3. ΝΕΑ ΣΥΝΑΡΤΗΣΗ LIVE WEB SEARCH (DUCKDUCKGO) ---
+def search_the_web(query, max_results=4):
+    context_list = []
+    try:
+        # Live αναζήτηση στο web χωρίς API Key
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=max_results)]
+            for item in results:
+                title = item.get("title", "")
+                snippet = item.get("body", "")
+                link = item.get("href", "")
+                context_list.append(f"Τίτλος: {title}\nΠηγή: {link}\nΠληροφορία: {snippet}")
+    except Exception as e:
+        print(f"Search Error: {e}")
+        
+    return "\n\n".join(context_list) if context_list else None
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "current_chat" not in st.session_state:
@@ -203,12 +172,18 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         except Exception:
             search_query = user_input
 
-    # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
+    # 3. Live Αναζήτηση στο Web με τα έξυπνα Keywords
     search_context = ""
-    with st.spinner(f"🔍 Αναζήτηση για '{search_query}'..."):
-        results = search_wikipedia(search_query, max_characters=2000)
+    with st.spinner(f"🔍 Ζωντανή αναζήτηση στο Web για '{search_query}'..."):
+        # Καλούμε τη νέα συνάρτηση web search
+        results = search_the_web(search_query, max_results=4) 
         if results:
-            search_context = f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ WIKIPEDIA]:\n{results}\n\nΟδηγία: Απάντησε βασιζόμενος αυστηρά στα παραπάνω δεδομένα της Wikipedia."
+            search_context = (
+                f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ ΑΠΟ ΤΟ WEB]:\n{results}\n\n"
+                "Οδηγία: Απάντησε με αρκετή λεπτομέρεια. "
+                "Φτιάξε κατηγορίες (π.χ. Σχεδιασμός, Τεχνικά χαρακτηριστικά, λειτουργείες, πλεονεκτήματα και μειωνεκτήματα) "
+                "χρησιμοποίησε bullet points (κουκκίδες) για να παρουσιάσεις αναλυτικά τα χαρακτηριστικά."
+            )
 
     # 4. Δημιουργία Μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
