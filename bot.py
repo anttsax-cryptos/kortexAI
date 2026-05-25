@@ -51,7 +51,7 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΕΞΥΠΝΗ ΑΝΑΖΗΤΗΣΗ KEYWORDS) ---
+# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΠΛΗΡΕΣ ΚΕΙΜΕΝΟ ΑΡΘΡΟΥ - ΔΙΟΡΘΩΜΕΝΗ) ---
 def search_wikipedia(query, max_characters=2000):
     # Καθαρισμός του query από περιττές φράσεις
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για"]
@@ -63,7 +63,7 @@ def search_wikipedia(query, max_characters=2000):
     formatted_query = urllib.parse.quote_plus(clean_query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
     
-    # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en) για μεγαλύτερη βάση δεδομένων
+    # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en)
     for lang in ["el", "en"]:
         try:
             # Βήμα 1: Αναζήτηση για να βρούμε τον ακριβή τίτλο του άρθρου
@@ -75,12 +75,13 @@ def search_wikipedia(query, max_characters=2000):
                 results = search_data.get("query", {}).get("search", [])
                 
                 if not results:
-                    continue # Αν δεν βρει τίποτα σε αυτή τη γλώσσα, πάει στην επόμενη
+                    continue
                 
+                # ΔΙΟΡΘΩΣΗ: Παίρνουμε το πρώτο στοιχείο [0] της λίστας των αποτελεσμάτων
                 exact_title = results[0]["title"]
                 formatted_title = urllib.parse.quote_plus(exact_title)
                 
-                # Βήμα 2: Λήψη ολόκληρου του κειμένου (extract) του συγκεκριμένου άρθρου
+                # Βήμα 2: Λήψη ολόκληρου του κειμένου (extract) του άρθρου
                 content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
                 content_response = requests.get(content_url, headers=headers, timeout=5)
                 
@@ -91,16 +92,13 @@ def search_wikipedia(query, max_characters=2000):
                     for page_id, page_info in pages.items():
                         extract = page_info.get("extract", "")
                         if extract.strip():
-                            # Κρατάμε μέχρι το όριο χαρακτήρων για να μην ξεπεράσουμε τα όρια του prompt
                             if len(extract) > max_characters:
                                 extract = extract[:max_characters] + "..."
-                            return f"[{lang.upper()} WIKIPEDIA ARTICLE: {exact_title}]\n{extract}"
+                            return f"[{lang.upper()}] Τίτλος: {exact_title}\nΠληροφορία: {extract}"
         except Exception:
             continue
             
     return None
-
-
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "current_chat" not in st.session_state:
