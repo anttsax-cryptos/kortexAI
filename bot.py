@@ -160,7 +160,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
     )
     try:
         route_check = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # Διορθωμένο έγκυρο μοντέλο
+            model="llama-3.3-70b-versatile",  # Ενημέρωση και εδώ για ταχύτητα/εξυπνάδα
             messages=[{"role": "user", "content": router_prompt}],
             temperature=0.0
         )
@@ -176,19 +176,19 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
             if results:
                 search_context = f"\n\n[Πληροφορίες από την Wikipedia]:\n{results}"
 
-    # Χτίσιμο μηνυμάτων για την τελική απάντηση (Μέγιστο 6 προηγούμενα μηνύματα)
+    # Χτίσιμο μηνυμάτων για την τελική απάντηση
     full_system_prompt = personalities[selected_persona] + search_context
     api_messages = [{"role": "system", "content": full_system_prompt}]
     
-    # Προσθήκη πρόσφατου ιστορικού
-    api_messages.extend(st.session_state.messages[-6:])
+    # Επειδή το llama-3.3-70b έχει τεράστιο context, μπορούμε να κρατήσουμε περισσότερο ιστορικό (π.χ. 12 μηνύματα)
+    api_messages.extend(st.session_state.messages[-12:])
 
     # Κλήση Groq για την τελική απάντηση
     with st.chat_message("assistant"):
         with st.spinner("Σκέφτομαι..."):
             try:
                 chat_completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",  
+                    model="llama-3.3-70b-versatile",  # Το νέο σου πανίσχυρο μοντέλο
                     messages=api_messages,
                     temperature=0.7
                 )
@@ -200,3 +200,4 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
+
