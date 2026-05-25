@@ -204,7 +204,6 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
     with st.chat_message("assistant"):
         try:
             response = client.chat.completions.create(
-                model="mixtral-8x7b-32768",
                 messages=recent_messages,  # Χρήση της περιορισμένης λίστας recent_messages
                 temperature=0.6,
             )
