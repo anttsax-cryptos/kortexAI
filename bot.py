@@ -169,15 +169,6 @@ with st.sidebar:
             st.session_state.current_chat = new_id
             st.session_state.messages = []
             save_chat_history(new_id, [])
-        st.rerun()
-
-# --- 5. MAIN INTERFACE ---
-st.title("🤖 StrictexAI ChatBot")
-
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
 # --- 6. INTELLIGENT ROUTING & RESPONSE ---
 if user_input := st.chat_input("Type your message here..."):
     
@@ -197,7 +188,6 @@ if user_input := st.chat_input("Type your message here..."):
     # 2. Εκτέλεση αναζήτησης ΜΟΝΟ αν ΔΕΝ είναι απλός χαιρετισμός
     if not is_greeting:
         if len(st.session_state.messages) > 1:
-            # ΔΙΟΡΘΩΣΗ: Προσθήκη οδηγίας γλώσσας και στον Rewriter για να μην μπερδεύεται
             rewriter_prompt = (
                 "You are a search assistant. Based on the user's latest input and conversation history, "
                 "write a short, optimized search query (keywords) for DuckDuckGo or Wikipedia. "
@@ -217,7 +207,8 @@ if user_input := st.chat_input("Type your message here..."):
                     messages=rewrite_messages,
                     temperature=0.0
                 )
-                search_query = rewrite_res.choices.message.content.strip()
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] στα choices
+                search_query = rewrite_res.choices[0].message.content.strip()
             except Exception:
                 search_query = user_input
 
@@ -243,7 +234,6 @@ if user_input := st.chat_input("Type your message here..."):
                 )
 
     # 4. Χτίσιμο των τελικών μηνυμάτων
-    # Επαναλαμβάνουμε τον κανόνα της γλώσσας και στο κυρίως prompt για 100% ασφάλεια
     lang_mirror_rule = "\n\nCRITICAL: Automatically detect the language of the user's latest message and reply ONLY in that language. If the user wrote in Greek, translate all the web data into Greek and reply in Greek."
     full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
     
@@ -257,12 +247,22 @@ if user_input := st.chat_input("Type your message here..."):
                 chat_completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=api_messages,
-                    temperature=0.4 # Χαμηλό temperature για να μην παρακούει τις οδηγίες
+                    temperature=0.4
                 )
-                assistant_response = chat_completion.choices.message.content
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] στα choices
+                assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
                 st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Error communicating with Groq: {e}")
+        st.rerun()
+
+# --- 5. MAIN INTERFACE ---
+st.title("🤖 StrictexAI ChatBot")
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+
