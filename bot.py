@@ -52,22 +52,75 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- 3. ΝΕΑ ΣΥΝΑΡΤΗΣΗ LIVE WEB SEARCH (DUCKDUCKGO) ---
+# --- 3. ΕΞΥΠΝΟΣ ΜΗΧΑΝΙΣΜΟΣ ΑΝΑΖΗΤΗΣΗΣ (ΜΕ CACHING & FALLBACK) ---
 def search_the_web(query, max_results=5):
+    # Καθαρισμός του query
+    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για"]
+    clean_query = query.lower()
+    for word in stop_words:
+        clean_query = clean_query.replace(word, "")
+    clean_query = clean_query.strip()
+
+    if not clean_query:
+        return None
+
+    # Αρχικοποίηση cache στο session_state αν δεν υπάρχει
+    if "search_cache" not in st.session_state:
+        st.session_state.search_cache = {}
+
+    # 1. ΕΛΕΓΧΟΣ CACHE: Αν έχουμε ψάξει ξανά αυτό το keyword, επέστρεψε το αμέσως!
+    if clean_query in st.session_state.search_cache:
+        return st.session_state.search_cache[clean_query]
+
     context_list = []
+    
+    # 2. ΠΡΟΣΠΑΘΕΙΑ LIVE WEB SEARCH (DUCKDUCKGO)
     try:
-        # Live αναζήτηση στο web χωρίς API Key
         with DDGS() as ddgs:
-            results = [r for r in ddgs.text(query, max_results=max_results)]
-            for item in results:
-                title = item.get("title", "")
-                snippet = item.get("body", "")
-                link = item.get("href", "")
-                context_list.append(f"Τίτλος: {title}\nΠηγή: {link}\nΠληροφορία: {snippet}")
-    except Exception as e:
-        print(f"Search Error: {e}")
+            results = [r for r in ddgs.text(clean_query, max_results=max_results)]
+            if results:
+                for item in results:
+                    title = item.get("title", "")
+                    snippet = item.get("body", "")
+                    link = item.get("href", "")
+                    context_list.append(f"• {title} ({link}): {snippet}")
+                
+                final_context = "\n\n".join(context_list)
+                # Αποθήκευση στην cache για την επόμενη φορά
+                st.session_state.search_cache[clean_query] = final_context
+                return final_context
+    except Exception:
+        pass # Αν φάει Rate Limit, συνεχίζει αθόρυβα στο Fallback
+
+    # 3. FALLBACK ΣΤΗ WIKIPEDIA (Αν το DuckDuckGo μπλοκάρει)
+    try:
+        headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
+        formatted_query = urllib.parse.quote_plus(clean_query)
         
-    return "\n\n".join(context_list) if context_list else None
+        for lang in ["el", "en"]:
+            search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
+            search_res = requests.get(search_url, headers=headers, timeout=4).json()
+            results = search_res.get("query", {}).get("search", [])
+            
+            if results:
+                exact_title = results[0]["title"]
+                formatted_title = urllib.parse.quote_plus(exact_title)
+                
+                content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
+                content_res = requests.get(content_url, headers=headers, timeout=4).json()
+                pages = content_res.get("query", {}).get("pages", {})
+                
+                for page_id, page_info in pages.items():
+                    extract = page_info.get("extract", "")
+                    if extract.strip():
+                        final_context = f"[WIKIPEDIA FALLBACK]: {extract[:1500]}"
+                        st.session_state.search_cache[clean_query] = final_context
+                        return final_context
+    except Exception:
+        pass
+
+    return None
+
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "current_chat" not in st.session_state:
