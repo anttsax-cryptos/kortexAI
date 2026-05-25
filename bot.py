@@ -51,38 +51,49 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΠΛΗΡΩΣ ΔΙΟΡΘΩΜΕΝΗ) ---
-def search_wikipedia(query, max_results=2):
+# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΕΞΥΠΝΗ ΑΝΑΖΗΤΗΣΗ KEYWORDS) ---
+def search_wikipedia(query, max_results=5):
     context_list = []
-    formatted_query = urllib.parse.quote_plus(query)
+    
+    # Καθαρισμός του query από περιττές φράσεις για να ψάξει μόνο τα keywords (π.χ. Samsung Galaxy S26)
+    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για"]
+    clean_query = query.lower()
+    for word in stop_words:
+        clean_query = clean_query.replace(word, "")
+    clean_query = clean_query.strip()
+
+    formatted_query = urllib.parse.quote_plus(clean_query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
     
     # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en)
     for lang in ["el", "en"]:
         try:
-            url = f"https://{lang}.wikipedia.org/w/api.php?action=opensearch&search={formatted_query}&limit={max_results}&namespace=0&format=json"
+            # Χρήση του κανονικού Search API της Wikipedia που συγχωρεί ορθογραφικά λάθη
+            url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit={max_results}&format=json"
             response = requests.get(url, headers=headers, timeout=5)
+            
             if response.status_code == 200:
                 data = response.json()
+                search_results = data.get("query", {}).get("search", [])
                 
-                # Δομή opensearch: data[1] = τίτλοι, data[2] = περιγραφές/snippets
-                if len(data) >= 3 and data[1] and data[2]:
-                    for i in range(len(data[1])):
-                        title = data[1][i]
-                        snippet = data[2][i] if i < len(data[2]) else ""
-                        
-                        if snippet.strip(): # Μην προσθέτεις κενές πληροφορίες
-                            if len(snippet) > 400:
-                                snippet = snippet[:400] + "..."
-                            context_list.append(f"[{lang.upper()}] Τίτλος: {title}\nΠληροφορία: {snippet}")
+                for item in search_results:
+                    title = item.get("title")
+                    snippet = item.get("snippet", "")
                     
-                    # Αν βρήκαμε γεμάτα αποτελέσματα, σταματάμε εδώ
-                    if context_list:
-                        break
+                    # Καθαρισμός των HTML tags (π.χ. <span class="searchmatch">) που βάζει η Wikipedia
+                    clean_snippet = snippet.replace('<span class="searchmatch">', '').replace('</span>', '')
+                    
+                    if clean_snippet.strip():
+                        context_list.append(f"[{lang.upper()}] Τίτλος: {title}\nΠληροφορία: {clean_snippet}...")
+                
+                # Αν βρήκαμε αποτελέσματα σε αυτή τη γλώσσα, σταματάμε και δεν πάμε στην επόμενη
+                if context_list:
+                    break
         except Exception:
             continue
             
     return "\n\n".join(context_list) if context_list else None
+
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "current_chat" not in st.session_state:
