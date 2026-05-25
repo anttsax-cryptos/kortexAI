@@ -169,6 +169,14 @@ with st.sidebar:
             st.session_state.current_chat = new_id
             st.session_state.messages = []
             save_chat_history(new_id, [])
+
+# --- 5. MAIN INTERFACE ---
+st.title("🤖 StrictexAI ChatBot")
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+
 # --- 6. INTELLIGENT ROUTING & RESPONSE ---
 if user_input := st.chat_input("Type your message here..."):
     
@@ -212,7 +220,7 @@ if user_input := st.chat_input("Type your message here..."):
             except Exception:
                 search_query = user_input
 
-        # 3. Live Web Search
+        # 3. Live Web Search (ΓΕΝΙΚΕΥΜΕΝΗ ΟΔΗΓΙΑ ΓΙΑ ΚΑΘΕ ΕΙΔΟΥΣ ΕΡΩΤΗΣΗ)
         with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
             results = search_the_web(search_query, max_results=5)
             if results:
@@ -220,18 +228,32 @@ if user_input := st.chat_input("Type your message here..."):
                     f"\n\n[LIVE WEB DATA]:\n{results}\n\n"
                     "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ (Urgently Detailed):\n"
                     "1. CRITICAL MANDATE: Automatically detect the language that the user used in their last message. You MUST write your entire response STRICTLY in that exact same language (e.g., if the user wrote in Greek, reply in Greek. If they wrote in English, reply in English). Never default to English if the user wrote in Greek.\n"
-                    "2. Θέλω να γράψεις μια εξαιρετικά αναλυτική και πλήρη παρουσίαση, χωρίς να παραλείψεις καμία λεπτομέρεια από τα παραπάνω δεδομένα.\n"
-                    "3. Ανάλογα με το θέμα της ερώτησης, οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points ως εξής:\n\n"
+                    "2. Θέλω να γράψεις μια εξαιρετικά αναλυτική, πλήρη και επεξηγηματική παρουσίαση, χωρίς να παραλείψεις καμία λεπτομέρεια από τα παραπάνω δεδομένα.\n"
+                    "3. Ανάλογα με το θέμα της ερώτησης, οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες:\n\n"
+                    
                     "📦 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΪΟΝ (π.χ. τηλέφωνο, gadget, αυτοκίνητο, συσκευή):\n"
-                    "- **Γενικές πληροφορίες** / **General Information**\n"
+                    "- **Γενικές πληροφορίες** / **General Information** (με λίγα λόγια για το τι είναι)\n"
                     "- **Σχεδιασμός & Χαρακτηριστικά** / **Design & Features** (διαστάσεις, λειτουργίες, πλεονεκτήματα, μειονεκτήματα)\n"
                     "- **Τιμή** / **Price** (κόστος και διαθεσιμότητα προϊόντος)\n\n"
+                    
                     "📢 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΓΕΓΟΝΟΣ / ΕΙΔΗΣΗ (π.χ. αγώνας, συναυλία, φυσικό φαινόμενο, είδηση):\n"
-                    "- **Γενικό Πλαίσιο** / **General Context** (Πότε και πού συνέβη, ποιοι εμπλέκονται)\n"
-                    "- **Χρονικό & Λεπτομέρειες** / **Timeline & Details** (Αναλυτικά τι συνέβη, σημαντικές στιγμές)\n"
+                    "- **Γενικό Πλαίσιο** / **General Context** (Πότε και πού συνέβη ή θα συμβεί, ποιοι εμπλέκονται)\n"
+                    "- **Χρονικό & Λεπτομέρειες** / **Timeline & Details** (Αναλυτικά τι συνέβη, φάσεις του γεγονότος, σημαντικές στιγμές)\n"
                     "- **Αποτέλεσμα / Αντίκτυπος** / **Result / Impact** (Σκορ, δηλώσεις, συνέπειες)\n\n"
+                    
+                    "👤 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΣΩΠΟ (π.χ. ιστορικό πρόσωπο, celebrity, επιστήμονας):\n"
+                    "- **Ποιος είναι** / **Who they are** (Ιδιότητα, καταγωγή, σύντομη σύνοψη της φήμης του)\n"
+                    "- **Βιογραφία & Έργο** / **Biography & Career** (Σημαντικά επιτεύγματα, σταθμοί στη ζωή του, ανακαλύψεις)\n"
+                    "- **Κληρονομιά / Αντίκτυπος** / **Legacy / Impact** (Πώς επηρέασε τον κόσμο ή τον τομέα του)\n\n"
+                    
+                    "🧠 ΓΙΑ ΟΠΟΙΟΔΗΠΟΤΕ ΑΛΛΟ ΘΕΜΑ (π.χ. επιστήμη, ορισμοί, ιστορία, γενικές ερωτήσεις, οδηγίες):\n"
+                    "- **Ορισμός & Εισαγωγή** / **Definition & Introduction** (Τι σημαίνει η έννοια ή το θέμα με απλά λόγια)\n"
+                    "- **Αναλυτική Ανάλυση** / **In-depth Analysis** (Πώς λειτουργεί, ιστορικό υπόβαθρο, βήματα ή βασικές αρχές)\n"
+                    "- **Σημασία / Εφαρμογές** / **Significance / Applications** (Πού χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n\n"
+                    
                     "Αν κάποια πληροφορία λείπει από τα δεδομένα, μην την εφεύρεις, απλά ανάφερε ό,τι είναι διαθέσιμο με όσο το δυνατόν περισσότερες λεπτομέρειες."
                 )
+
 
     # 4. Χτίσιμο των τελικών μηνυμάτων
     lang_mirror_rule = "\n\nCRITICAL: Automatically detect the language of the user's latest message and reply ONLY in that language. If the user wrote in Greek, translate all the web data into Greek and reply in Greek."
@@ -258,11 +280,3 @@ if user_input := st.chat_input("Type your message here..."):
             except Exception as e:
                 st.error(f"Error communicating with Groq: {e}")
         st.rerun()
-
-# --- 5. MAIN INTERFACE ---
-st.title("🤖 StrictexAI ChatBot")
-
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
