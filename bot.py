@@ -186,24 +186,23 @@ if user_input := st.chat_input("Type your message here..."):
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Λίστα με απλούς χαιρετισμούς (greetings) σε Ελληνικά και Αγγλικά
+    # Λίστα χαιρετισμών
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
     clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
-    
-    # Απλός και ασφαλής έλεγχος: Αν το κείμενο είναι μέσα στη λίστα ή είναι κάτω από 2 λέξεις
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
     search_context = ""
     search_query = user_input
 
-    # 2. Εκτέλεση αναζήτηση ΜΟΝΟ αν ΔΕΝ είναι απλός χαιρετισμός
+    # 2. Εκτέλεση αναζήτησης ΜΟΝΟ αν ΔΕΝ είναι απλός χαιρετισμός
     if not is_greeting:
         if len(st.session_state.messages) > 1:
+            # ΔΙΟΡΘΩΣΗ: Προσθήκη οδηγίας γλώσσας και στον Rewriter για να μην μπερδεύεται
             rewriter_prompt = (
                 "You are a search assistant. Based on the user's latest input and conversation history, "
                 "write a short, optimized search query (keywords) for DuckDuckGo or Wikipedia. "
                 "If the query is technical or about international products, prefer English keywords. "
-                "Respond STRICTLY with the keywords only, nothing else.\n\n"
+                "Respond STRICTLY with the keywords only, nothing else. Do not change the user's intent.\n\n"
                 f"User input: {user_input}"
             )
             
@@ -218,17 +217,18 @@ if user_input := st.chat_input("Type your message here..."):
                     messages=rewrite_messages,
                     temperature=0.0
                 )
-                search_query = rewrite_res.choices[0].message.content.strip()
+                search_query = rewrite_res.choices.message.content.strip()
             except Exception:
                 search_query = user_input
-        # 3. Live Web Search (ΠΛΗΡΗΣ ΟΔΗΓΙΑ ΓΙΑ ΠΡΟΪΟΝΤΑ, ΓΕΓΟΝΟΤΑ & ΓΛΩΣΣΑ)
+
+        # 3. Live Web Search
         with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
             results = search_the_web(search_query, max_results=5)
             if results:
                 search_context = (
                     f"\n\n[LIVE WEB DATA]:\n{results}\n\n"
                     "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ (Urgently Detailed):\n"
-                    "1. CRITICAL: Automatically detect the language that the user used in their last message. You MUST write your entire response STRICTLY in that exact same language (e.g., if the user wrote in Greek, reply in Greek. If they wrote in English, reply in English).\n"
+                    "1. CRITICAL MANDATE: Automatically detect the language that the user used in their last message. You MUST write your entire response STRICTLY in that exact same language (e.g., if the user wrote in Greek, reply in Greek. If they wrote in English, reply in English). Never default to English if the user wrote in Greek.\n"
                     "2. Θέλω να γράψεις μια εξαιρετικά αναλυτική και πλήρη παρουσίαση, χωρίς να παραλείψεις καμία λεπτομέρεια από τα παραπάνω δεδομένα.\n"
                     "3. Ανάλογα με το θέμα της ερώτησης, οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points ως εξής:\n\n"
                     "📦 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΪΟΝ (π.χ. τηλέφωνο, gadget, αυτοκίνητο, συσκευή):\n"
@@ -242,29 +242,27 @@ if user_input := st.chat_input("Type your message here..."):
                     "Αν κάποια πληροφορία λείπει από τα δεδομένα, μην την εφεύρεις, απλά ανάφερε ό,τι είναι διαθέσιμο με όσο το δυνατόν περισσότερες λεπτομέρειες."
                 )
 
-    # 4. Δημιουργία Μηνυμάτων με τον κανόνα της γλώσσας
-    lang_mirror_rule = "\n\nCRITICAL MANDATE: Automatically detect the language of the user's latest message and reply STRICTLY in that exact same language. Do not mix languages or default to English unless the user writes in English."
+    # 4. Χτίσιμο των τελικών μηνυμάτων
+    # Επαναλαμβάνουμε τον κανόνα της γλώσσας και στο κυρίως prompt για 100% ασφάλεια
+    lang_mirror_rule = "\n\nCRITICAL: Automatically detect the language of the user's latest message and reply ONLY in that language. If the user wrote in Greek, translate all the web data into Greek and reply in Greek."
     full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
     
     api_messages = [{"role": "system", "content": full_system_prompt}]
     api_messages.extend(st.session_state.messages[-12:])
 
-    # 5. Τελική κλήση στο Groq API για την απάντηση
+    # 5. Κλήση Groq για την τελική απάντηση
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
                 chat_completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=api_messages,
-                    temperature=0.5
+                    temperature=0.4 # Χαμηλό temperature για να μην παρακούει τις οδηγίες
                 )
-                assistant_response = chat_completion.choices[0].message.content
+                assistant_response = chat_completion.choices.message.content
                 st.write(assistant_response)
                 
-                # Αποθήκευση στο ιστορικό
                 st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Error communicating with Groq: {e}")
-
-    
