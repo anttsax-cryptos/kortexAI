@@ -160,7 +160,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
     )
     try:
         route_check = client.chat.completions.create(
-            model="llama3-8b-8192",  # Διορθωμένο έγκυρο μοντέλο
+            model="llama-3.3-70b-versatile",  # Διορθωμένο έγκυρο μοντέλο
             messages=[{"role": "user", "content": router_prompt}],
             temperature=0.0
         )
