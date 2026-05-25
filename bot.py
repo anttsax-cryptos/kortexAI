@@ -163,8 +163,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                         context_list.append(f"Title: {title}\nInformation: {snippet}")
         except Exception:
             pass
-
-    return "\n\n".join(context_list) if context_list else None
+ return "\n\n".join(context_list) if context_list else None
 
 # --- CONFIGURATION ΣΕΛΙΔΑΣ ---
 st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
