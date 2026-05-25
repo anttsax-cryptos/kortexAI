@@ -132,7 +132,9 @@ with st.sidebar:
     st.divider()
     
     all_chats = get_all_chats()
-    chat_ids = [c for c in all_chats]
+    # Κρατάμε μόνο το καθαρό όνομα του chat (ID) χωρίς την επέκταση αρχείου
+    chat_ids = [c for c, ext in all_chats] 
+    
     if chat_ids:
         if st.session_state.current_chat not in chat_ids:
             st.session_state.current_chat = chat_ids
@@ -142,6 +144,8 @@ with st.sidebar:
             chat_ids,
             index=current_index,
             key="chat_selector"
+        )
+
         )
         if selected_chat != st.session_state.current_chat:
             st.session_state.current_chat = selected_chat
