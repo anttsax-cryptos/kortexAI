@@ -69,8 +69,8 @@ def search_wikipedia(query, max_results=1):
                 if len(data) >= 3 and data[1] and data[2]:
                     # Κάνουμε loop με βάση το πλήθος των τίτλων που βρέθηκαν
                     for i in range(len(data[1])):
-                        title = data[1][i]
-                        snippet = data[2][i]
+                        title = data[2][i]
+                        snippet = data[1][i]
                         
                         if len(snippet) > 300:
                             snippet = snippet[:300] + "..."
