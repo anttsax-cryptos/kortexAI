@@ -162,7 +162,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# --- 7. ΕΞΑΝΑΓΚΑΣΜΕΝΗ ΑΝΑΖΗΤΗΣΗ & ΑΠΑΝΤΗΣΗ ---
+# --- 7. ΕΞΑΝΑΓΚΑΣΜΕΝΗ ΑΝΑΖΗΤΗΣΗ ΜΕ AI QUERY REWRITING & ΑΠΑΝΤΗΣΗ ---
 if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."):
     
     # 1. Εμφάνιση μηνύματος χρήστη
@@ -170,28 +170,55 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 2. Αυτόματη / Εξαναγκασμένη Αναζήτηση στη Wikipedia (χωρίς AI Router)
-    search_context = ""
-    with st.spinner("🔍 Αναζήτηση δεδομένων στη Wikipedia..."):
-        results = search_wikipedia(user_input, max_results=2)
-        if results:
-            search_context = f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ WIKIPEDIA]:\n{results}\n\nΟδηγία: Απάντησε βασιζόμενος αυστηρά στα παραπάνω δεδομένα της Wikipedia αν σχετίζονται με την ερώτηση."
+    # 2. AI QUERY REWRITING: Μετατροπή της ερώτησης σε καθαρά Keywords αναζήτησης με βάση το ιστορικό
+    search_query = user_input
+    if len(st.session_state.messages) > 1:
+        rewriter_prompt = (
+            "Είσαι ένας βοηθός αναζήτησης. Με βάση την τελευταία ερώτηση του χρήστη και το πρόσφατο ιστορικό, "
+            "γράψε ένα σύντομο κείμενο αναζήτησης (keywords) για τη Wikipedia στα Αγγλικά ή Ελληνικά. "
+            "Αν ο χρήστης χρησιμοποιεί αντωνυμίες όπως 'αυτό', 'το', 'του', αντικατάστησέ τις με το σωστό όνομα του προϊόντος ή προσώπου. "
+            "Απάντησε ΑΥΣΤΗΡΑ μόνο με τις λέξεις-κλειδιά αναζήτησης, τίποτα άλλο.\n\n"
+            f"Τελευταία ερώτηση: {user_input}"
+        )
+        
+        # Παίρνουμε τα τελευταία 4 μηνύματα για να ξέρει το AI για ποιο πράγμα μιλάμε
+        rewrite_messages = []
+        for msg in st.session_state.messages[-5:-1]:
+            rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
+        rewrite_messages.append({"role": "user", "content": rewriter_prompt})
+        
+        try:
+            rewrite_res = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=rewrite_messages,
+                temperature=0.0 # 0 για απόλυτη σταθερότητα
+            )
+            search_query = rewrite_res.choices[0].message.content.strip()
+        except Exception:
+            search_query = user_input
 
-    # 3. Δημιουργία Μηνυμάτων για το Groq API
+    # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
+    search_context = ""
+    with st.spinner(f"🔍 Αναζήτηση για '{search_query}'..."):
+        results = search_wikipedia(search_query, max_results=2)
+        if results:
+            search_context = f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ WIKIPEDIA]:\n{results}\n\nΟδηγία: Απάντησε βασιζόμενος αυστηρά στα παραπάνω δεδομένα της Wikipedia."
+
+    # 4. Δημιουργία Μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
     api_messages = [{"role": "system", "content": full_system_prompt}]
     
     # Κρατάμε τα τελευταία 12 μηνύματα για μνήμη
     api_messages.extend(st.session_state.messages[-12:])
 
-    # 4. Κλήση Groq για την τελική απάντηση
+    # 5. Κλήση Groq για την τελική απάντηση
     with st.chat_message("assistant"):
         with st.spinner("Σκέφτομαι..."):
             try:
                 chat_completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=api_messages,
-                    temperature=0.4 # Χαμηλότερο temperature για να μένει πιστό στο context
+                    temperature=0.4
                 )
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
