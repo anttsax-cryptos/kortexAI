@@ -6,7 +6,7 @@ import requests
 import urllib.parse
 from groq import Groq
 
-# --- 1. CONFIGURATION ΣΕΛΙΔΑΣ (ΠΑΝΤΑ ΠΡΩΤΟ!) ---
+# --- 1. CONFIGURATION ΣΕΛΙΔΑΣ ---
 st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
 
 # Φάκελος για την αποθήκευση των συνομιλιών τοπικά
@@ -51,13 +51,13 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΔΙΟΡΘΩΜΕΝΗ) ---
-def search_wikipedia(query, max_results=1):
+# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΠΛΗΡΩΣ ΔΙΟΡΘΩΜΕΝΗ) ---
+def search_wikipedia(query, max_results=2):
     context_list = []
     formatted_query = urllib.parse.quote_plus(query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
     
-    # Δοκιμή στην Ελληνική (el) και μετά στην Αγγλική (en) Wikipedia
+    # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en)
     for lang in ["el", "en"]:
         try:
             url = f"https://{lang}.wikipedia.org/w/api.php?action=opensearch&search={formatted_query}&limit={max_results}&namespace=0&format=json"
@@ -65,25 +65,24 @@ def search_wikipedia(query, max_results=1):
             if response.status_code == 200:
                 data = response.json()
                 
-                # Έλεγχος αν το API επέστρεψε έγκυρες λίστες τίτλων και περιγραφών
+                # Δομή opensearch: data[1] = τίτλοι, data[2] = περιγραφές/snippets
                 if len(data) >= 3 and data[1] and data[2]:
-                    # Κάνουμε loop με βάση το πλήθος των τίτλων που βρέθηκαν
                     for i in range(len(data[1])):
-                        title = data[2][i]
-                        snippet = data[1][i]
+                        title = data[1][i]
+                        snippet = data[2][i] if i < len(data[2]) else ""
                         
-                        if len(snippet) > 300:
-                            snippet = snippet[:300] + "..."
-                        context_list.append(f"[{lang.upper()}] Τίτλος: {title}\nΠληροφορία: {snippet}")
+                        if snippet.strip(): # Μην προσθέτεις κενές πληροφορίες
+                            if len(snippet) > 400:
+                                snippet = snippet[:400] + "..."
+                            context_list.append(f"[{lang.upper()}] Τίτλος: {title}\nΠληροφορία: {snippet}")
                     
-                    # Αν βρήκαμε αποτελέσματα στην τρέχουσα γλώσσα, σταματάμε τη δοκιμή
+                    # Αν βρήκαμε γεμάτα αποτελέσματα, σταματάμε εδώ
                     if context_list:
                         break
         except Exception:
             continue
             
     return "\n\n".join(context_list) if context_list else None
-
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "current_chat" not in st.session_state:
@@ -152,60 +151,42 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# --- 7. ΛΟΓΙΚΗ ΕΙΣΑΓΩΓΗΣ ΜΗΝΥΜΑΤΟΣ & ROUTING (ΕΝΟΠΟΙΗΜΕΝΗ) ---
+# --- 7. ΕΞΑΝΑΓΚΑΣΜΕΝΗ ΑΝΑΖΗΤΗΣΗ & ΑΠΑΝΤΗΣΗ ---
 if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."):
     
+    # 1. Εμφάνιση μηνύματος χρήστη
     with st.chat_message("user"):
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Έξυπνη απόφαση για Αναζήτηση (Routing) μέσω Groq
-    decision = "NO"
-    router_prompt = (
-        f"Ανάλυσε την ερώτηση του χρήστη: '{user_input}'. "
-        "Αν η ερώτηση αφορά συγκεκριμένα ιστορικά γεγονότα, πρόσωπα, επιστήμη, γεωγραφία, ορισμούς, "
-        "ή εγκυκλοπαιδικές γνώσεις, απάντησε ΑΥΣΤΗΡΑ με τη λέξη YES. αλλιώς απάντησε NO."
-    )
-    try:
-        route_check = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # Ενημέρωση και εδώ για ταχύτητα/εξυπνάδα
-            messages=[{"role": "user", "content": router_prompt}],
-            temperature=0.0
-        )
-        decision = route_check.choices[0].message.content.strip().upper()
-    except Exception:
-        decision = "YES"
-
-    # Αν χρειάζεται Wikipedia
+    # 2. Αυτόματη / Εξαναγκασμένη Αναζήτηση στη Wikipedia (χωρίς AI Router)
     search_context = ""
-    if "YES" in decision:
-        with st.spinner("🔍 Αναζήτηση στην Wikipedia..."):
-            results = search_wikipedia(user_input)
-            if results:
-                search_context = f"\n\n[Πληροφορίες από την Wikipedia]:\n{results}"
+    with st.spinner("🔍 Αναζήτηση δεδομένων στη Wikipedia..."):
+        results = search_wikipedia(user_input, max_results=2)
+        if results:
+            search_context = f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ WIKIPEDIA]:\n{results}\n\nΟδηγία: Απάντησε βασιζόμενος αυστηρά στα παραπάνω δεδομένα της Wikipedia αν σχετίζονται με την ερώτηση."
 
-    # Χτίσιμο μηνυμάτων για την τελική απάντηση
+    # 3. Δημιουργία Μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
     api_messages = [{"role": "system", "content": full_system_prompt}]
     
-    # Επειδή το llama-3.3-70b έχει τεράστιο context, μπορούμε να κρατήσουμε περισσότερο ιστορικό (π.χ. 12 μηνύματα)
+    # Κρατάμε τα τελευταία 12 μηνύματα για μνήμη
     api_messages.extend(st.session_state.messages[-12:])
 
-    # Κλήση Groq για την τελική απάντηση
+    # 4. Κλήση Groq για την τελική απάντηση
     with st.chat_message("assistant"):
         with st.spinner("Σκέφτομαι..."):
             try:
                 chat_completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",  # Το νέο σου πανίσχυρο μοντέλο
+                    model="llama-3.3-70b-versatile",
                     messages=api_messages,
-                    temperature=0.7
+                    temperature=0.4 # Χαμηλότερο temperature για να μένει πιστό στο context
                 )
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
-                # Αποθήκευση
+                # Αποθήκευση στο ιστορικό
                 st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
-
