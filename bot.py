@@ -40,10 +40,94 @@ def save_chat_history(chat_id, messages):
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 # --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΦΙΛΤΡΟ ΜΕΓΕΘΟΥΣ) ---
-def search_wikipedia(query, max_results=2):
+# --- ΔΙΟΡΘΩΜΕΝΗ ΣΥΝΑΡΤΗΣΗ WIKIPEDIA ---
+def search_wikipedia(query, max_results=1):
     context_list = []
     formatted_query = urllib.parse.quote_plus(query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
+    
+    # 1. Δοκιμή στην Ελληνική Wikipedia με σωστό Opensearch Parsing
+    try:
+        url_el = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
+        response = requests.get(url_el, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            # Το data[1] είναι οι τίτλοι, το data[2] είναι τα αποσπάσματα κειμένου (snippets)
+            if len(data) >= 3 and data[1]:
+                for i in range(len(data[1])):
+                    title = data[1][i]
+                    snippet = data[2][i] if i < len(data[2]) else ""
+                    if len(snippet) > 300:  # Αυστηρό όριο χαρακτήρων
+                        snippet = snippet[:300] + "..."
+                    context_list.append(f"Τίτλος: {title}\nΠληροφορία: {snippet}")
+    except Exception:
+        pass
+
+    # 2. Αν δεν βρέθηκε τίποτα, δοκιμή στην Αγγλική Wikipedia
+    if not context_list:
+        try:
+            url_en = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
+            response = requests.get(url_en, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if len(data) >= 3 and data[1]:
+                    for i in range(len(data[1])):
+                        title = data[1][i]
+                        snippet = data[2][i] if i < len(data[2]) else ""
+                        if len(snippet) > 300:
+                            snippet = snippet[:300] + "..."
+                        context_list.append(f"Title: {title}\nInformation: {snippet}")
+        except Exception:
+            pass
+
+    return "\n\n".join(context_list) if context_list else None
+
+
+# --- ΚΥΡΙΑ ΛΕΙΤΟΥΡΓΙΑ CHAT INPUT (Αντικαταστήστε μόνο αυτό το block στο τέλος) ---
+if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."):
+    
+    # 1. Εμφάνιση και αποθήκευση του μηνύματος του χρήστη
+    with st.chat_message("user"):
+        st.write(user_input)
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    
+    # 2. Αναζήτηση στη Wikipedia (Φέρνει αυστηρά 1 αποτέλεσμα)
+    wiki_context = search_wikipedia(user_input, max_results=1)
+    
+    # 3. Προετοιμασία εμπλουτισμένου μηνύματος για το AI
+    if wiki_context:
+        user_content = f"""Χρησιμοποίησε τις παρακάτω σύντομες πληροφορίες από τη Wikipedia για να απαντήσεις:
+        
+{wiki_context}
+
+Ερώτηση: {user_input}"""
+    else:
+        user_content = user_input
+
+    # 4. ΦΙΛΤΡΑΡΙΣΜΑ ΙΣΤΟΡΙΚΟΥ (Κρατάμε μόνο 4 προηγούμενα μηνύματα για απόλυτη ασφάλεια)
+    recent_messages = [{"role": "system", "content": personalities[selected_persona]}]
+    recent_messages.extend(st.session_state.messages[-4:-1])  
+    recent_messages.append({"role": "user", "content": user_content}) 
+
+    # 5. Κλήση Groq API με τη νέα φιλτραρισμένη λίστα
+    with st.chat_message("assistant"):
+        try:
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                messages=recent_messages,  
+                temperature=0.6,
+            )
+            
+            answer = response.choices.message.content
+            st.write(answer)
+            
+            # Αποθήκευση απάντησης
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            save_chat_history(st.session_state.current_chat, st.session_state.messages)
+            
+        except Exception as e:
+            st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
+            
     
     # 1. Δοκιμή στην Ελληνική Wikipedia
     try:
