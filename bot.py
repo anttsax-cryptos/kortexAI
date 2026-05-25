@@ -119,7 +119,6 @@ if "current_chat" not in st.session_state:
 
 if "messages" not in st.session_state:
     st.session_state.messages = load_chat_history(st.session_state.current_chat)
-
 # --- 4. SIDEBAR GRAPHICS (TRANSLATED TO ENGLISH) ---
 with st.sidebar:
     st.header("⚙ Settings & History")
@@ -132,20 +131,18 @@ with st.sidebar:
     st.divider()
     
     all_chats = get_all_chats()
-    # Κρατάμε μόνο το καθαρό όνομα του chat (ID) χωρίς την επέκταση αρχείου
-    chat_ids = [c for c, ext in all_chats] 
+    chat_ids = [c for c, ext in all_chats]
     
     if chat_ids:
         if st.session_state.current_chat not in chat_ids:
-            st.session_state.current_chat = chat_ids
+            st.session_state.current_chat = chat_ids[0]
+        
         current_index = chat_ids.index(st.session_state.current_chat)
         selected_chat = st.selectbox(
             "💬 Select Chat:",
             chat_ids,
             index=current_index,
             key="chat_selector"
-        )
-
         )
         if selected_chat != st.session_state.current_chat:
             st.session_state.current_chat = selected_chat
@@ -165,8 +162,8 @@ with st.sidebar:
             os.remove(file_path)
         remaining_chats = get_all_chats()
         if remaining_chats:
-            st.session_state.current_chat = remaining_chats
-            st.session_state.messages = load_chat_history(remaining_chats)
+            st.session_state.current_chat = remaining_chats[0][0]
+            st.session_state.messages = load_chat_history(st.session_state.current_chat)
         else:
             new_id = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
             st.session_state.current_chat = new_id
