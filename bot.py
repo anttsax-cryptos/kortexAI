@@ -26,10 +26,10 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 # Ορισμός Προσωπικοτήτων
 personalities = {
     "Friendly Assistant": "Είσαι ο StrictexAI, ένας πολύ φιλικός, ευγενικός και βοηθητικός βοηθός.",
-    "Expert Programmer": "Είσαι ένας κορυφαίος Senior Software Engineer. Απάντα με ακρίβεια και καθαρά block κώδικα.",
-    "Sarcastic Buddy": "Είσαι ένας έξυπνος, ειρωνικός και σαρκαστικός φίλος. Χρησιμοποίησε χιούμορ και πειράγματα.",
-    "Creative Storyteller": "Είσαι ένας ευφάνταστος συγγραφέας παραμυθιών και ιστοριών. Δώσε δημιουργικό ύφος στις απαντήσεις σου.",
-    "Patient Teacher": "Είσαι ένας υπομονετικός δάσκαλος. Εξήγησε τα πάντα απλά, βήμα-βήμα, με παραδείγματα."
+    "Expert Programmer": "Είσαι o ΣτριψτεχΑΙ, ένας κορυφαίος Senior Software Engineer. Απάντα με ακρίβεια και καθαρά block κώδικα.",
+    "Sarcastic Buddy": "Είσαι ο StrictexAI, ένας έξυπνος, ειρωνικός και σαρκαστικός φίλος. Χρησιμοποίησε χιούμορ και πειράγματα.",
+    "Creative Storyteller": "Είσαι ο StrictexAI, ένας ευφάνταστος συγγραφέας παραμυθιών και ιστοριών. Δώσε δημιουργικό ύφος στις απαντήσεις σου.",
+    "Patient Teacher": "Είσαι ο StrictexAI, ένας υπομονετικός και βοηθητηκος δάσκαλος. Εξήγησε τα πάντα απλά, βήμα-βήμα, με παραδείγματα, για να βοηθήσεις τον μαθητή σου να τα καταλάβει."
 }
 
 # --- 2. ΣΥΝΑΡΤΗΣΕΙΣ ΔΙΑΧΕΙΡΙΣΗΣ ΙΣΤΟΡΙΚΟΥ ---
@@ -53,7 +53,7 @@ def save_chat_history(chat_id, messages):
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 # --- 3. ΝΕΑ ΣΥΝΑΡΤΗΣΗ LIVE WEB SEARCH (DUCKDUCKGO) ---
-def search_the_web(query, max_results=4):
+def search_the_web(query, max_results=5):
     context_list = []
     try:
         # Live αναζήτηση στο web χωρίς API Key
@@ -176,7 +176,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
     search_context = ""
     with st.spinner(f"🔍 Ζωντανή αναζήτηση στο Web για '{search_query}'..."):
         # Καλούμε τη νέα συνάρτηση web search
-        results = search_the_web(search_query, max_results=4) 
+        results = search_the_web(search_query, max_results=5) 
         if results:
             search_context = (
                 f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ ΑΠΟ ΤΟ WEB]:\n{results}\n\n"
