@@ -64,18 +64,26 @@ def search_wikipedia(query, max_results=1):
             response = requests.get(url, headers=headers, timeout=5)
             if response.status_code == 200:
                 data = response.json()
+                
+                # Έλεγχος αν το API επέστρεψε έγκυρες λίστες τίτλων και περιγραφών
                 if len(data) >= 3 and data[1] and data[2]:
+                    # Κάνουμε loop με βάση το πλήθος των τίτλων που βρέθηκαν
                     for i in range(len(data[1])):
                         title = data[1][i]
                         snippet = data[2][i]
+                        
                         if len(snippet) > 300:
                             snippet = snippet[:300] + "..."
                         context_list.append(f"[{lang.upper()}] Τίτλος: {title}\nΠληροφορία: {snippet}")
-                    break # Αν βρει στην Ελληνική, σταματάει
+                    
+                    # Αν βρήκαμε αποτελέσματα στην τρέχουσα γλώσσα, σταματάμε τη δοκιμή
+                    if context_list:
+                        break
         except Exception:
             continue
             
-    return "\n\n". join(context_list) if context_list else None
+    return "\n\n".join(context_list) if context_list else None
+
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
 if "current_chat" not in st.session_state:
