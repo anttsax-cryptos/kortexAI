@@ -195,10 +195,76 @@ if user_input := st.chat_input("Type your message here..."):
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # (Εδώ παραμένει όλος ο ενδιάμεσος κώδικας για greetings και web search...)
-    # ... [Κρατάς τον κώδικα αναζήτησης ακριβώς όπως είναι] ...
+    # Skip search logic for greetings
+    greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
+    clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
+    is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
-    # 5. Κλήση Groq για την τελική απάντηση
+    search_context = ""
+    search_query = user_input
+
+    if not is_greeting:
+        if len(st.session_state.messages) > 1:
+            rewriter_prompt = (
+                "You are a search assistant. Based on the user's latest input and conversation history, "
+                "write a short, optimized search query (keywords) for DuckDuckGo or Wikipedia. "
+                "If the query is technical or about international products, prefer English keywords. "
+                "Respond STRICTLY with the keywords only, nothing else. Do not change the user's intent.\n\n"
+                f"User input: {user_input}"
+            )
+            
+            rewrite_messages = []
+            for msg in st.session_state.messages[-5:-1]:
+                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
+            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
+            
+            try:
+                rewrite_res = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=rewrite_messages,
+                    temperature=0.0
+                )
+                search_query = rewrite_res.choices[0].message.content.strip()
+            except Exception:
+                search_query = user_input
+
+        # Live Web Search
+        with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
+            results = search_the_web(search_query, max_results=5)
+            if results:
+                search_context = (
+                    f"\n\n[LIVE WEB DATA]:\n{results}\n\n"
+                    "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ (Urgently Detailed):\n"
+                    "1. CRITICAL MANDATE: Automatically detect the language that the user used in their last message. You MUST write your entire response STRICTLY in that exact same language (e.g., if the user wrote in Greek, reply in Greek. If they wrote in English, reply in English). Never default to English if the user wrote in Greek.\n"
+                    "2. Θέλω να γράψεις μια εξαιρετικά αναλυτική, πλήρη και επεξηγηματική παρουσίαση, χωρίς να παραλείψεις καμία λεπτομέρεια από τα παραπάνω δεδομένα.\n"
+                    "3. Ανάλογα με το θέμα της ερώτησης, οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες:\n\n"
+                    "📦 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΪΟΝ (π.χ. τηλέφωνο, gadget, αυτοκίνητο, συσκευή):\n"
+                    "- **Γενικές πληροφορίες** / **General Information** (με λίγα λόγια για το τι είναι)\n"
+                    "- **Σχεδιασμός & Χαρακτηριστικά** / **Design & Features** (διαστάσεις, λειτουργίες, πλεονεκτήματα, μειονεκτήματα)\n"
+                    "- **Τιμή** / **Price** (κόστος και διαθεσιμότητα προϊόντος)\n\n"
+                    "📢 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΓΕΓΟΝΟΣ / ΕΙΔΗΣΗ (π.χ. αγώνας, συναυλία, φυσικό φαινόμενο, είδηση):\n"
+                    "- **Γενικό Πλαίσιο** / **General Context** (Πότε και πού συνέβη ή θα συμβεί, ποιοι εμπλέκονται)\n"
+                    "- **Χρονικό & Λεπτομέρειες** / **Timeline & Details** (Αναλυτικά τι συνέβη, φάσεις του γεγονότος, σημαντικές στιγμές)\n"
+                    "- **Αποτέλεσμα / Αντίκτυπος** / **Result / Impact** (Σκορ, δηλώσεις, συνέπειες)\n\n"
+                    "👤 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΣΩΠΟ (π.χ. ιστορικό πρόσωπο, celebrity, επιστήμονας):\n"
+                    "- **Ποιος είναι** / **Who they are** (Ιδιότητα, καταγωγή, σύντομη σύνοψη της φήμης του)\n"
+                    "- **Βιογραφία & Έργο** / **Biography & Career** (Σημαντικά επιτεύγματα, σταθμοί στη ζωή του, ανακαλύψεις)\n"
+                    "- **Κληρονομιά / Αντίκτυπος** / **Legacy / Impact** (Πώς επηρέασε τον κόσμο ή τον τομέα του)\n\n"
+                    "🧠 ΓΙΑ ΟΠΟΙΟΔΗΠΟΤΕ ΑΛΛΟ ΘΕΜΑ (π.χ. επιστήμη, ορισμοί, historia, γενικές ερωτήσεις, οδηγίες):\n"
+                    "- **Ορισμός & Εισαγωγή** / **Definition & Introduction** (Τι σημαίνει η έννοια ή το θέμα με απλά λόγια)\n"
+                    "- **Αναλυτική Ανάλυση** / **In-depth Analysis** (Πώς λειτουργεί, ιστορικό υπόβαθρο, βήματα ή βασικές αρχές)\n"
+                    "- **Σημασία / Εφαρμογές** / **Significance / Applications** (Πού χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n\n"
+                    "Αν κάποια πληροφορία λείπει από τα δεδομένα, μην την εφεύρεις, απλά ανάφερε ό,τι είναι διαθέσιμο με όσο το δυνατόν περισσότερες λεπτομέρειες."
+                )
+
+    # Final prompt preparation
+    lang_mirror_rule = "\n\nCRITICAL: Automatically detect the language of the user's latest message and reply ONLY in that language. If the user wrote in Greek, translate all the web data into Greek and reply in Greek."
+    full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
+    
+    api_messages = [{"role": "system", "content": full_system_prompt}]
+    api_messages.extend(st.session_state.messages[-12:])
+
+    # Final Chat Generation
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
@@ -207,15 +273,12 @@ if user_input := st.chat_input("Type your message here..."):
                     messages=api_messages,
                     temperature=0.4
                 )
-                assistant_response = chat_completion.choices.message.content
+                assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
-                # Εμφάνιση των Credits live αμέσως μετά την απάντηση
-                st.caption("---")
-                st.caption("*Created by Antonis Tsachpinis | Powered by Streamlit and Groq*")
-                
-                # Αποθήκευση στο ιστορικό
+                # Save to state and directory
                 st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Error communicating with Groq: {e}")
+
