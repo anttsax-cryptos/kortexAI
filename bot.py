@@ -52,7 +52,6 @@ def save_chat_history(chat_id, messages):
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 # --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΕΞΥΠΝΗ ΑΝΑΖΗΤΗΣΗ KEYWORDS) ---
-# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΠΛΗΡΕΣ ΚΕΙΜΕΝΟ ΑΡΘΡΟΥ) ---
 def search_wikipedia(query, max_characters=2000):
     # Καθαρισμός του query από περιττές φράσεις
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για"]
@@ -208,9 +207,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
     # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
     search_context = ""
     with st.spinner(f"🔍 Αναζήτηση για '{search_query}'..."):
-        results = search_wikipedia(search_query, max_results=2)
-        if results:
-            search_context = f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ WIKIPEDIA]:\n{results}\n\nΟδηγία: Απάντησε βασιζόμενος αυστηρά στα παραπάνω δεδομένα της Wikipedia."
+        results = search_wikipedia(search_query, max_results=2) # <-- ΕΔΩ ΕΙΝΑΙ ΤΟ ΛΑΘΟΣ
 
     # 4. Δημιουργία Μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
