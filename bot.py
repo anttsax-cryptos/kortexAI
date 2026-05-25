@@ -172,13 +172,52 @@ for msg in st.session_state.messages:
         st.write(msg["content"])
 
 # Εισαγωγή νέου μηνύματος από τον χρήστη
+# --- ΚΥΡΙΑ ΛΕΙΤΟΥΡΓΙΑ CHAT INPUT (ΑΝΤΙΚΑΤΑΣΤΑΣΗ ΜΟΝΟ ΕΔΩ) ---
 if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."):
     
-    # 1. Εμφάνιση & Αποθήκευση μηνύματος χρήστη
+    # 1. Εμφάνιση και αποθήκευση του μηνύματος του χρήστη
     with st.chat_message("user"):
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
-    save_chat_history(st.session_state.current_chat, st.session_state.messages)
+    
+    # 2. Αναζήτηση στη Wikipedia για φρέσκια πληροφορία
+    wiki_context = search_wikipedia(user_input)
+    
+    # 3. Προετοιμασία εμπλουτισμένου μηνύματος για το AI
+    if wiki_context:
+        user_content = f"""Χρησιμοποίησε τις παρακάτω πρόσφατες πληροφορίες από τη Wikipedia για να απαντήσεις στην ερώτηση του χρήστη.
+
+Πληροφορίες Wikipedia:
+{wiki_context}
+
+Ερώτηση Χρήστη: {user_input}"""
+    else:
+        user_content = user_input
+
+    # 4. ΦΙΛΤΡΑΡΙΣΜΑ ΙΣΤΟΡΙΚΟΥ (Λύνει το σφάλμα 413)
+    # Κρατάμε το System Prompt της προσωπικότητας και τα τελευταία 6 μηνύματα συνομιλίας
+    recent_messages = [{"role": "system", "content": personalities[selected_persona]}]
+    recent_messages.extend(st.session_state.messages[-6:-1])  # Το προηγούμενο ιστορικό χωρίς το τρέχον μήνυμα
+    recent_messages.append({"role": "user", "content": user_content}) # Το τρέχον μήνυμα μαζί με το Wiki context
+
+    # 5. Κλήση Groq API με τη νέα φιλτραρισμένη λίστα
+    with st.chat_message("assistant"):
+        try:
+            response = client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                messages=recent_messages,  # Χρήση της περιορισμένης λίστας recent_messages
+                temperature=0.6,
+            )
+            
+            answer = response.choices.message.content
+            st.write(answer)
+            
+            # Αποθήκευση απάντησης του Assistant στο ιστορικό
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            save_chat_history(st.session_state.current_chat, st.session_state.messages)
+            
+        except Exception as e:
+            st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
     
     # 2. Έξυπνη απόφαση για Αναζήτηση (Routing)
     router_prompt = (
