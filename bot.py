@@ -197,52 +197,56 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 2. AI QUERY REWRITING: Μετατροπή της ερώτησης σε καθαρά Keywords αναζήτησης με βάση το ιστορικό
-    search_query = user_input
-    if len(st.session_state.messages) > 1:
-        rewriter_prompt = (
-            "Είσαι ένας βοηθός αναζήτησης. Με βάση την τελευταία ερώτηση του χρήστη και το πρόσφατο ιστορικό, "
-            "γράψε ένα σύντομο κείμενο αναζήτησης (keywords) για τη Wikipedia στα Αγγλικά ή Ελληνικά. "
-            "Αν ο χρήστης χρησιμοποιεί αντωνυμίες όπως 'αυτό', 'το', 'του', αντικατάστησέ τις με το σωστό όνομα του προϊόντος ή προσώπου. "
-            "Απάντησε ΑΥΣΤΗΡΑ μόνο με τις λέξεις-κλειδιά αναζήτησης, τίποτα άλλο.\n\n"
-            f"Τελευταία ερώτηση: {user_input}"
-        )
-        
-        # Παίρνουμε τα τελευταία 4 μηνύματα για πλαίσιο
-        rewrite_messages = []
-        for msg in st.session_state.messages[-5:-1]:
-            rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
-        rewrite_messages.append({"role": "user", "content": rewriter_prompt})
-        
-        try:
-            rewrite_res = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=rewrite_messages,
-                temperature=0.0
-            )
-            # ΔΙΟΡΘΩΣΗ: Προσθήκη [0] στα choices
-            search_query = rewrite_res.choices[0].message.content.strip()
-        except Exception:
-            search_query = user_input
+    # Λίστα με απλούς χαιρετισμούς για άμεσο skip της αναζήτησης
+    greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι","how are you","wat's up"]
+    clean_input_lower = user_input.lower().strip().replace("?", "").replace(".", "")
+    
+    # Έλεγχος αν είναι απλός χαιρετισμός ή πολύ μικρή κουβέντα (π.χ. < 3 λέξεις χωρίς ερώτηση για πληροφορία)
+    words_count = len(clean_input_lower.split())
+    is_greeting = clean_input_lower in greetings or (words_count <= 2 and not any(w in clean_input_lower for w in ["τι", "ποιος", "που", "ποτε", "γιατι", "πως", "ποιο"]));
 
-    # 3. Live Αναζήτηση στο Web με τα έξυπνα Keywords
     search_context = ""
-    with st.spinner(f"🔍 Ζωντανή αναζήτηση στο Web για '{search_query}'..."):
-        # Καλούμε τη νέα συνάρτηση web search
-        results = search_the_web(search_query, max_results=5) 
-        if results:
-            search_context = (
-                f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ ΑΠΟ ΤΟ WEB]:\n{results}\n\n"
-                "Οδηγία: Απάντησε με αρκετή λεπτομέρεια. "
-                "Φτιάξε κατηγορίες (π.χ. Σχεδιασμός, Τεχνικά χαρακτηριστικά, λειτουργείες, πλεονεκτήματα και μειωνεκτήματα) "
-                "χρησιμοποίησε bullet points (κουκκίδες) για να παρουσιάσεις αναλυτικά τα χαρακτηριστικά."
+    search_query = user_input
+
+    # 2. Εκτέλεση αναζήτησης ΜΟΝΟ αν ΔΕΝ είναι απλός χαιρετισμός
+    if not is_greeting:
+        if len(st.session_state.messages) > 1:
+            rewriter_prompt = (
+                "Είσαι ένας βοηθός αναζήτησης. Με βάση την τελευταία ερώτηση του χρήστη και το πρόσφατο ιστορικό, "
+                "γράψε ένα σύντομο κείμενο αναζήτησης (keywords) για τη Wikipedia ή το Web στα Αγγλικά ή Ελληνικά. "
+                "Αν ο χρήστης χρησιμοποιεί αντωνυμίες όπως 'αυτό', 'το', 'του', αντικατάστησέ τις με το σωστό όνομα του προϊόντος ή προσώπου. "
+                "Απάντησε ΑΥΣΤΗΡΑ μόνο με τις λέξεις-κλειδιά αναζήτησης, τίποτα άλλο.\n\n"
+                f"Τελευταία ερώτηση: {user_input}"
             )
+            
+            rewrite_messages = []
+            for msg in st.session_state.messages[-5:-1]:
+                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
+            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
+            
+            try:
+                rewrite_res = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=rewrite_messages,
+                    temperature=0.0
+                )
+                search_query = rewrite_res.choices[0].message.content.strip()
+            except Exception:
+                search_query = user_input
+
+        # 3. Αναζήτηση στο Web με τα έξυπνα Keywords
+        with st.spinner(f"🔍 Ζωντανή αναζήτηση στο Web για '{search_query}'..."):
+            results = search_the_web(search_query, max_results=5)
+            if results:
+                search_context = (
+                    f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ ΑΠΟ ΤΟ WEB]:\n{results}\n\n"
+                    "Οδηγία: Απάντησε με εξαιρετική λεπτομέρεια. "
+                    "Φτιάξε κατηγορίες και χρησιμοποίησε bullet points αν πρόκειται για παρουσίαση προϊόντος ή τεχνικών χαρακτηριστικών."
+                )
 
     # 4. Δημιουργία Μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
     api_messages = [{"role": "system", "content": full_system_prompt}]
-    
-    # Κρατάμε τα τελευταία 12 μηνύματα για μνήμη
     api_messages.extend(st.session_state.messages[-12:])
 
     # 5. Κλήση Groq για την τελική απάντηση
@@ -252,15 +256,14 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                 chat_completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=api_messages,
-                    temperature=0.4
+                    temperature=0.5
                 )
-                # ΔΙΟΡΘΩΣΗ: Προσθήκη [0] στα choices
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
-                # Αποθήκευση στο ιστορικό
                 st.session_state.messages.append({"role": "assistant", "content": assistant_response})
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
+
 
