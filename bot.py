@@ -205,9 +205,12 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
             search_query = user_input
 
     # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
+    # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
     search_context = ""
     with st.spinner(f"🔍 Αναζήτηση για '{search_query}'..."):
-        results = search_wikipedia(search_query, max_results=2) # <-- ΕΔΩ ΕΙΝΑΙ ΤΟ ΛΑΘΟΣ
+        results = search_wikipedia(search_query, max_characters=2000)
+        if results:
+            search_context = f"\n\n[ΠΡΟΣΦΑΤΑ ΔΕΔΟΜΕΝΑ WIKIPEDIA]:\n{results}\n\nΟδηγία: Απάντησε βασιζόμενος αυστηρά στα παραπάνω δεδομένα της Wikipedia."
 
     # 4. Δημιουργία Μηνυμάτων για το Groq API
     full_system_prompt = personalities[selected_persona] + search_context
@@ -225,7 +228,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                     messages=api_messages,
                     temperature=0.4
                 )
-                assistant_response = chat_completion.choices[0].message.content
+                assistant_response = chat_completion.choices.message.content
                 st.write(assistant_response)
                 
                 # Αποθήκευση στο ιστορικό
