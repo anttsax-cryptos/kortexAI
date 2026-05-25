@@ -186,7 +186,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
             f"Τελευταία ερώτηση: {user_input}"
         )
         
-        # Παίρνουμε τα τελευταία 4 μηνύματα για να ξέρει το AI για ποιο πράγμα μιλάμε
+        # Παίρνουμε τα τελευταία 4 μηνύματα για πλαίσιο
         rewrite_messages = []
         for msg in st.session_state.messages[-5:-1]:
             rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
@@ -196,13 +196,13 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
             rewrite_res = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=rewrite_messages,
-                temperature=0.0 # 0 για απόλυτη σταθερότητα
+                temperature=0.0
             )
+            # ΔΙΟΡΘΩΣΗ: Προσθήκη [0] στα choices
             search_query = rewrite_res.choices[0].message.content.strip()
         except Exception:
             search_query = user_input
 
-    # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
     # 3. Αναζήτηση στη Wikipedia με τα έξυπνα Keywords
     search_context = ""
     with st.spinner(f"🔍 Αναζήτηση για '{search_query}'..."):
@@ -226,7 +226,8 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                     messages=api_messages,
                     temperature=0.4
                 )
-                assistant_response = chat_completion.choices.message.content
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη [0] στα choices
+                assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
                 # Αποθήκευση στο ιστορικό
@@ -234,3 +235,4 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."
                 save_chat_history(st.session_state.current_chat, st.session_state.messages)
             except Exception as e:
                 st.error(f"Σφάλμα κατά την επικοινωνία με το Groq: {e}")
+
