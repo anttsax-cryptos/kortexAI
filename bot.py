@@ -40,25 +40,23 @@ def save_chat_history(chat_id, messages):
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 # --- ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΦΙΛΤΡΟ ΜΕΓΕΘΟΥΣ) ---
-# --- ΔΙΟΡΘΩΜΕΝΗ ΣΥΝΑΡΤΗΣΗ WIKIPEDIA ---
 def search_wikipedia(query, max_results=1):
     context_list = []
     formatted_query = urllib.parse.quote_plus(query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
     
-    # 1. Δοκιμή στην Ελληνική Wikipedia με σωστό Opensearch Parsing
+    # 1. Δοκιμή στην Ελληνική Wikipedia
     try:
         url_el = f"https://wikipedia.org{formatted_query}&limit={max_results}&namespace=0&format=json"
         response = requests.get(url_el, headers=headers, timeout=5)
         if response.status_code == 200:
             data = response.json()
-            # Το data[1] είναι οι τίτλοι, το data[2] είναι τα αποσπάσματα κειμένου (snippets)
-            if len(data) >= 3 and data[1]:
+            if len(data) >= 3 and data[1] and data[2]:
                 for i in range(len(data[1])):
                     title = data[1][i]
-                    snippet = data[2][i] if i < len(data[2]) else ""
-                    if len(snippet) > 300:  # Αυστηρό όριο χαρακτήρων
-                        snippet = snippet[:300] + "..."
+                    snippet = data[2][i]
+                    if len(snippet) > 250:
+                        snippet = snippet[:250] + "..."
                     context_list.append(f"Τίτλος: {title}\nΠληροφορία: {snippet}")
     except Exception:
         pass
@@ -70,18 +68,18 @@ def search_wikipedia(query, max_results=1):
             response = requests.get(url_en, headers=headers, timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                if len(data) >= 3 and data[1]:
+                if len(data) >= 3 and data[1] and data[2]:
                     for i in range(len(data[1])):
                         title = data[1][i]
-                        snippet = data[2][i] if i < len(data[2]) else ""
-                        if len(snippet) > 300:
-                            snippet = snippet[:300] + "..."
+                        snippet = data[2][i]
+                        if len(snippet) > 250:
+                            snippet = snippet[:250] + "..."
                         context_list.append(f"Title: {title}\nInformation: {snippet}")
         except Exception:
             pass
 
     return "\n\n".join(context_list) if context_list else None
-
+    
 
 # --- ΚΥΡΙΑ ΛΕΙΤΟΥΡΓΙΑ CHAT INPUT (Αντικαταστήστε μόνο αυτό το block στο τέλος) ---
 if user_input := st.chat_input("Γράψτε το μήνυμά σας εδώ..."):
