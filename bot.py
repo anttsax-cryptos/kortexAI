@@ -52,10 +52,9 @@ def save_chat_history(chat_id, messages):
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 # --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΕΞΥΠΝΗ ΑΝΑΖΗΤΗΣΗ KEYWORDS) ---
-def search_wikipedia(query, max_results=5):
-    context_list = []
-    
-    # Καθαρισμός του query από περιττές φράσεις για να ψάξει μόνο τα keywords (π.χ. Samsung Galaxy S26)
+# --- 3. ΣΥΝΑΡΤΗΣΗ ΑΝΑΖΗΤΗΣΗΣ WIKIPEDIA (ΜΕ ΠΛΗΡΕΣ ΚΕΙΜΕΝΟ ΑΡΘΡΟΥ) ---
+def search_wikipedia(query, max_characters=2000):
+    # Καθαρισμός του query από περιττές φράσεις
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για"]
     clean_query = query.lower()
     for word in stop_words:
@@ -65,34 +64,43 @@ def search_wikipedia(query, max_results=5):
     formatted_query = urllib.parse.quote_plus(clean_query)
     headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
     
-    # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en)
+    # Δοκιμή πρώτα στα Ελληνικά (el) και μετά στα Αγγλικά (en) για μεγαλύτερη βάση δεδομένων
     for lang in ["el", "en"]:
         try:
-            # Χρήση του κανονικού Search API της Wikipedia που συγχωρεί ορθογραφικά λάθη
-            url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit={max_results}&format=json"
-            response = requests.get(url, headers=headers, timeout=5)
+            # Βήμα 1: Αναζήτηση για να βρούμε τον ακριβή τίτλο του άρθρου
+            search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
+            search_response = requests.get(search_url, headers=headers, timeout=5)
             
-            if response.status_code == 200:
-                data = response.json()
-                search_results = data.get("query", {}).get("search", [])
+            if search_response.status_code == 200:
+                search_data = search_response.json()
+                results = search_data.get("query", {}).get("search", [])
                 
-                for item in search_results:
-                    title = item.get("title")
-                    snippet = item.get("snippet", "")
-                    
-                    # Καθαρισμός των HTML tags (π.χ. <span class="searchmatch">) που βάζει η Wikipedia
-                    clean_snippet = snippet.replace('<span class="searchmatch">', '').replace('</span>', '')
-                    
-                    if clean_snippet.strip():
-                        context_list.append(f"[{lang.upper()}] Τίτλος: {title}\nΠληροφορία: {clean_snippet}...")
+                if not results:
+                    continue # Αν δεν βρει τίποτα σε αυτή τη γλώσσα, πάει στην επόμενη
                 
-                # Αν βρήκαμε αποτελέσματα σε αυτή τη γλώσσα, σταματάμε και δεν πάμε στην επόμενη
-                if context_list:
-                    break
+                exact_title = results[0]["title"]
+                formatted_title = urllib.parse.quote_plus(exact_title)
+                
+                # Βήμα 2: Λήψη ολόκληρου του κειμένου (extract) του συγκεκριμένου άρθρου
+                content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
+                content_response = requests.get(content_url, headers=headers, timeout=5)
+                
+                if content_response.status_code == 200:
+                    content_data = content_response.json()
+                    pages = content_data.get("query", {}).get("pages", {})
+                    
+                    for page_id, page_info in pages.items():
+                        extract = page_info.get("extract", "")
+                        if extract.strip():
+                            # Κρατάμε μέχρι το όριο χαρακτήρων για να μην ξεπεράσουμε τα όρια του prompt
+                            if len(extract) > max_characters:
+                                extract = extract[:max_characters] + "..."
+                            return f"[{lang.upper()} WIKIPEDIA ARTICLE: {exact_title}]\n{extract}"
         except Exception:
             continue
             
-    return "\n\n".join(context_list) if context_list else None
+    return None
+
 
 
 # --- 4. ΑΡΧΙΚΟΠΟΙΗΣΗ SESSION STATE ---
