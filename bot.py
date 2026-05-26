@@ -165,7 +165,7 @@ with st.sidebar:
     selected_chat = st.selectbox(
         "Επιλέξτε Συνομιλία:", 
         selectable_options, 
-        index=selectable_options.index(st.session_state.current_chat_title)
+        index=selectable_options.index(st.session_state.current_chat_title) if st.session_state.current_chat_title in selectable_options else 0
     )
     
     if selected_chat != st.session_state.current_chat_title:
@@ -239,3 +239,6 @@ if user_input:
 
     has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
     if has_greek:
+        search_context = ("\n\n[SYSTEM NOTICE]: Η αναζήτηση στο διαδίκτυο δεν επέστρεψε αποτελέσματα. ""Γνωρίζεις ότι το τρέχον έτος είναι το 2026. Μην πεις ότι το προϊόν δεν υπάρχει. ""Απάντησε στα Ελληνικά με βάση τις γνωστές προδιαγραφές ή επίσημες κυκλοφορίες μέχρι σήμερα.")
+    else:search_context = ("\n\n[SYSTEM NOTICE]: Web search returned no results. ""You know the current year is 2026. Do NOT say the product doesn't exist. ""Answer in English based on established specifications or official releases up to this point.")full_system_prompt = personalities[selected_persona] + time_context + search_context + lang_mirror_rule# 7. Model Inference Setup & Processingapi_messages = [{"role": "system", "content": full_system_prompt}]for msg in st.session_state.messages[-10:]:api_messages.append({"role": msg["role"], "content": msg["content"]})try:with st.spinner("🤖 Thinking..."):response = client.chat.completions.create(model="llama-3.1-8b-instant",messages=api_messages,temperature=0.7)full_response = response.choices.message.content.strip()with st.chat_message("assistant"):st.markdown(full_response)if enable_tts:response_has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in full_response)audio_lang = "el" if response_has_greek else "en"audio_bytes = text_to_speech(full_response, lang_code=audio_lang)if audio_bytes:st.audio(audio_bytes, format="audio/mp3")st.session_state.messages.append({"role": "assistant", "content": full_response})chat_title = st.session_state.get("current_chat_title", "Untitled Chat")save_chat_history(chat_title, st.session_state.messages)except Exception as e:st.error
+        (f"❌ Error communicating with Groq: {e}")
