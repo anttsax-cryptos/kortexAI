@@ -225,7 +225,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
         )
 
         if results:
-            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026. iPhone 17 series released late 2025. Treat as active product." + detailed_instruction
+            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026." + detailed_instruction
         else:
             search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
     else:
