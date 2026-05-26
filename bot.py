@@ -52,7 +52,7 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-def search_the_web(query, max_results=3):
+def search_the_web(query, max_results=5):
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
     clean_query = query.lower()
     for word in stop_words:
@@ -227,7 +227,7 @@ if user_input := st.chat_input("Type your message here..."):
                 f"User input: {user_input}"
             )
             rewrite_messages = []
-            for msg in st.session_state.messages[-3:-1]:
+            for msg in st.session_state.messages[-5:-1]:
                 rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
             rewrite_messages.append({"role": "user", "content": rewriter_prompt})
             try:
@@ -242,7 +242,7 @@ if user_input := st.chat_input("Type your message here..."):
 
         # Live Web Search
         with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
-            results = search_the_web(search_query, max_results=3)
+            results = search_the_web(search_query, max_results=5)
             
             # Ανίχνευση γλώσσας του χρήστη
             has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
