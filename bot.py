@@ -5,6 +5,7 @@ import requests
 import urllib.parse
 import streamlit.components.v1 as components
 from groq import Groq
+from streamlit_local_storage import LocalStorage
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="StrictexAI Ultra", layout="wide", page_icon="🤖")
@@ -23,62 +24,36 @@ personalities = {
     "Creative Storyteller": "You are StrictexAI, an imaginative world-builder. Give rich, deeply descriptive, and expansive narratives filled with intricate details and vivid lore.",
 }
 
-# --- 2. JAVASCRIPT MECHANISM FOR MULTIPLE CHATS (FIXED AUTO-JUMP) ---
+# ... υπόλοιπα imports
+
+# --- 2. ΣΥΓΧΡΟΝΙΣΜΕΝΟ LOCAL STORAGE (ΔΙΟΡΘΩΜΕΝΟ) ---
+local_storage = LocalStorage()
+
+# Αρχικοποίηση session state
 if "all_chats" not in st.session_state:
     st.session_state.all_chats = {}
 if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = None
-if "js_sync_done" not in st.session_state:
-    st.session_state.js_sync_done = False
 
-# Διορθωμένη JavaScript: Φορτώνει ΜΟΝΟ κατά την εκκίνηση, δεν ξαναπαρεμβαίνει κατά τα μηνύματα
-if not st.session_state.js_sync_done:
-    js_load_all = """
-    <script>
-        const savedData = localStorage.getItem("strictex_multichats");
-        const currentActive = localStorage.getItem("strictex_active_chat_id");
-        
-        window.parent.postMessage({
-            type: "LOAD_ALL_CHATS", 
-            data: savedData ? JSON.parse(savedData) : {},
-            active_id: currentActive || null
-        }, "*");
-    </script>
-    """
-    components.html(js_load_all, height=0, width=0)
+# Ανάκτηση δεδομένων κατά το Refresh / Εκκίνηση
+saved_chats_raw = local_storage.getItem("strictex_multichats")
+saved_active_id = local_storage.getItem("strictex_active_chat_id")
 
-# Συγχρονισμός δεδομένων από Browser προς Streamlit
-query_params = st.query_params
-if "incoming_chats" in query_params and not st.session_state.js_sync_done:
+if saved_chats_raw and not st.session_state.all_chats:
     try:
-        st.session_state.all_chats = json.loads(query_params["incoming_chats"])
-        st.session_state.js_sync_done = True
-        
-        # Κλείδωμα στο προηγούμενο ενεργό Chat ID για να μην πηγαίνει πάνω
-        saved_active = query_params.get("active_chat_id", None)
-        if saved_active and saved_active in st.session_state.all_chats:
-            st.session_state.current_chat_id = saved_active
-        elif st.session_state.all_chats.keys():
-            st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0]
-            
-        st.rerun()
+        st.session_state.all_chats = json.loads(saved_chats_raw)
+        if saved_active_id:
+            st.session_state.current_chat_id = saved_active_id
     except:
         pass
 
 def save_chats_to_browser():
-    """Αποθηκεύει άμεσα τα δεδομένα και κλειδώνει το τρέχον Chat ID"""
-    all_data_json = json.dumps(st.session_state.all_chats, ensure_ascii=False)
-    current_id = st.session_state.current_chat_id
-    st.components.v1.html(
-        f"""
-        <script>
-            localStorage.setItem("strictex_multichats", JSON.stringify({all_data_json}));
-            localStorage.setItem("strictex_active_chat_id", "{current_id}");
-        </script>
-        """,
-        height=0,
-        width=0
-    )
+    """Αποθηκεύει άμεσα τα δεδομένα στον browser"""
+    all_data_json = json.dumps(st.session_state.all_chats)
+    local_storage.setItem("strictex_multichats", all_data_json)
+    if st.session_state.current_chat_id:
+        local_storage.setItem("strictex_active_chat_id", st.session_state.current_chat_id)
+        
 
 # --- 3. WIKIPEDIA SEARCH FUNCTION ---
 def search_the_web(query, max_results=1):
