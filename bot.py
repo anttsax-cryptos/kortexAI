@@ -51,26 +51,50 @@ def save_chat_history(chat_id, messages):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
-def search_the_web(query, max_results=1):
+def search_the_web(query, max_results=5):
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
     clean_query = query.lower()
     for word in stop_words:
         clean_query = clean_query.replace(word, "")
     clean_query = clean_query.strip()
-    
+
     if not clean_query:
         return None
-        
+
     if "search_cache" not in st.session_state:
         st.session_state.search_cache = {}
-        
+
     if clean_query in st.session_state.search_cache:
         return st.session_state.search_cache[clean_query]
-        
+
+    context_list = []
+    
+    # 1. Primary Live Web Search via DuckDuckGo
+    try:
+        with DDGS() as ddgs:
+            results = ddgs.text(clean_query, max_results=max_results, timelimit='y')
+
+            if results:
+                for item in results:
+                    title = item.get("title", "")
+                    # ΕΛΕΓΧΟΣ ΓΙΑ ΟΛΑ ΤΑ ΠΙΘΑΝΑ ΚΛΕΙΔΙΑ ΤΟΥ DUCKDUCKGO API
+                    snippet = item.get("body") or item.get("snippet") or item.get("text") or ""
+                    link = item.get("href") or item.get("link") or ""
+                    
+                    if snippet:
+                        context_list.append(f"• {title} ({link}): {snippet}")
+                    
+                if context_list:
+                    final_context = "\n\n".join(context_list)
+                    st.session_state.search_cache[clean_query] = final_context
+                    return final_context
+    except Exception as e:
+        st.sidebar.warning(f"⚠️ DuckDuckGo Search failed: {e}. Trying Wikipedia...")
+
+    # 2. Wikipedia Fallback Strategy
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
-        
         for lang in ["el", "en"]:
             search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
             response = requests.get(search_url, headers=headers, timeout=4)
@@ -79,30 +103,29 @@ def search_the_web(query, max_results=1):
                 search_res = response.json()
                 results = search_res.get("query", {}).get("search", [])
                 
-                # ΔΙΟΡΘΩΣΗ: Προσθήκη του δείκτη [0] για να πάρουμε το πρώτο αποτέλεσμα της λίστας
                 if results and len(results) > 0:
-                    exact_title = results[0]["title"]
+                    # Σωστή λήψη του τίτλου από τη λίστα
+                    exact_title = results[0]["title"] 
                     formatted_title = urllib.parse.quote_plus(exact_title)
+                    content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
                     
-                    content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles={formatted_title}&format=json"
                     content_response = requests.get(content_url, headers=headers, timeout=4)
-                    
                     if content_response.status_code == 200 and content_response.text.strip():
                         content_res = content_response.json()
                         pages = content_res.get("query", {}).get("pages", {})
+                        
                         for page_id, page_info in pages.items():
                             extract = page_info.get("extract", "")
                             if extract.strip():
-                                wiki_link = f"https://{lang}.wikipedia.org/wiki/{formatted_title}"
-                                final_context = f"• {exact_title} ({wiki_link}): {extract[:1500]}"
+                                final_context = f"[WIKIPEDIA FALLBACK]: {extract[:1500]}"
                                 st.session_state.search_cache[clean_query] = final_context
                                 return final_context
     except Exception as e:
-        st.sidebar.error(f"❌ Wikipedia Search failed: {e}")
+        st.sidebar.error(f"❌ Wikipedia Fallback failed: {e}")
         
     return None
 
-    
+
 # --- 3. INITIALIZE SESSION STATE ---
 if "current_chat" not in st.session_state:
     all_chats = get_all_chats()
