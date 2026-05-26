@@ -72,7 +72,8 @@ def search_the_web(query, max_results=5):
     # 1. Primary Live Web Search via DuckDuckGo
     try:
         with DDGS() as ddgs:
-            results = ddgs.text(clean_query, max_results=max_results)
+            results = ddgs.text(clean_query, max_results=max_results, timelimit='y')
+
             if results:
                 for item in results:
                     title = item.get("title", "")
