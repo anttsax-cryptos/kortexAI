@@ -257,16 +257,17 @@ if user_input:
                 "- Keep tech queries in English keywords.\n"
                 "- Output ONLY the final keywords. No explanation, no quotes, no conversational text."
             )
-            rewrite_messages = []
-            for msg in st.session_state.messages[-5:-1]:
-                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
-            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
             try:
                 rewrite_res = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=rewrite_messages,
                     temperature=0.0
                 )
+                # ΔΙΟΡΘΩΣΗ: Πρόσβαση μέσω index [0] για ασφάλεια
+                search_query = rewrite_res.choices[0].message.content.strip()
+            except Exception:
+                search_query = user_input
+
                 search_query = rewrite_res.choices.message.content.strip()
             except Exception:
                 search_query = user_input
@@ -318,7 +319,9 @@ if user_input:
                 messages=api_messages,
                 temperature=0.7
             )
-            full_response = response.choices.message.content.strip()
+            # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] για να διαβαστεί σωστά το completion object
+            full_response = response.choices[0].message.content.strip()
+
 
         with st.chat_message("assistant"):
             st.markdown(full_response)
