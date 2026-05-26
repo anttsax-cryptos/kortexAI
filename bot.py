@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 from groq import Groq
 
 # --- 1. PAGE CONFIGURATION ---
-st.set_page_config(page_title="StrictexAI Local Chats", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="StrictexAI Ultra", layout="wide", page_icon="🤖")
 
 if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠ Please add your GROQ_API_KEY in Streamlit Secrets!")
@@ -15,57 +15,65 @@ if "GROQ_API_KEY" not in st.secrets:
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
+# Ενισχυμένα Prompts για μέγιστη ανάλυση και λεπτομέρεια
 personalities = {
-    "Friendly Assistant": "You are StrictexAI, a very friendly, polite, and helpful assistant.",
-    "Expert Programmer": "You are a top Senior Software Engineer. Provide highly accurate answers and clean code blocks.",
-    "Sarcastic Buddy": "You are a smart, ironic, and sarcastic friend. Use clever humor and light teasing.",
-    "Creative Storyteller": "You are an imaginative storyteller. Give a highly creative and engaging tone to your responses.",
+    "Friendly Assistant": "You are StrictexAI, a highly detailed and comprehensive encyclopedia. Provide extensive, in-depth analysis, precise specifications, and complete technical overviews for every product or topic requested. Never summarize complex details.",
+    "Expert Programmer": "You are a top Senior Software Engineer. Provide exhaustive, highly accurate technical documentation, full code examples without omissions, and deep architectural explanations.",
+    "Sarcastic Buddy": "You are a highly analytical yet sarcastic expert. Give full, detailed specs and facts, but wrap them in clever, witty humor and light teasing.",
+    "Creative Storyteller": "You are an imaginative world-builder. Give rich, deeply descriptive, and expansive narratives filled with intricate details and vivid lore.",
 }
 
-# --- 2. JAVASCRIPT MECHANISM FOR MULTIPLE CHATS ---
-# Αρχικοποίηση των δομών στη μνήμη του Streamlit
+# --- 2. JAVASCRIPT MECHANISM FOR MULTIPLE CHATS (FIXED AUTO-JUMP) ---
 if "all_chats" not in st.session_state:
-    st.session_state.all_chats = {}  # {chat_id: {"title": ..., "messages": [...]}}
+    st.session_state.all_chats = {}
 if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = None
 if "js_sync_done" not in st.session_state:
     st.session_state.js_sync_done = False
 
-# JavaScript για ανάκτηση όλων των συνομιλιών από τον Browser κατά το Load
+# Διορθωμένη JavaScript: Φορτώνει ΜΟΝΟ κατά την εκκίνηση, δεν ξαναπαρεμβαίνει κατά τα μηνύματα
 if not st.session_state.js_sync_done:
     js_load_all = """
     <script>
         const savedData = localStorage.getItem("strictex_multichats");
-        if (savedData) {
-            window.parent.postMessage({type: "LOAD_ALL_CHATS", data: JSON.parse(savedData)}, "*");
-        } else {
-            window.parent.postMessage({type: "LOAD_ALL_CHATS", data: {}}, "*");
-        }
+        const currentActive = localStorage.getItem("strictex_active_chat_id");
+        
+        window.parent.postMessage({
+            type: "LOAD_ALL_CHATS", 
+            data: savedData ? JSON.parse(savedData) : {},
+            active_id: currentActive || null
+        }, "*");
     </script>
     """
     components.html(js_load_all, height=0, width=0)
 
-# Διαχείριση των μηνυμάτων JavaScript από την Python (μέσω query params για συγχρονισμό)
+# Συγχρονισμός δεδομένων από Browser προς Streamlit
 query_params = st.query_params
 if "incoming_chats" in query_params and not st.session_state.js_sync_done:
     try:
         st.session_state.all_chats = json.loads(query_params["incoming_chats"])
         st.session_state.js_sync_done = True
-        # Αν υπάρχουν chats, επιλέγουμε το πρώτο διαθέσιμο
-        if st.session_state.all_chats.keys():
+        
+        # Κλείδωμα στο προηγούμενο ενεργό Chat ID για να μην πηγαίνει πάνω
+        saved_active = query_params.get("active_chat_id", None)
+        if saved_active and saved_active in st.session_state.all_chats:
+            st.session_state.current_chat_id = saved_active
+        elif st.session_state.all_chats.keys():
             st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0]
+            
         st.rerun()
     except:
         pass
 
 def save_chats_to_browser():
-    """Συνάρτηση που αποθηκεύει άμεσα τα δεδομένα στον Browser χωρίς καθυστερήσεις"""
+    """Αποθηκεύει άμεσα τα δεδομένα και κλειδώνει το τρέχον Chat ID"""
     all_data_json = json.dumps(st.session_state.all_chats, ensure_ascii=False)
-    # Χρήση session_state tag για να αναγκάσουμε το component να γίνει render αμέσως
+    current_id = st.session_state.current_chat_id
     st.components.v1.html(
         f"""
         <script>
             localStorage.setItem("strictex_multichats", JSON.stringify({all_data_json}));
+            localStorage.setItem("strictex_active_chat_id", "{current_id}");
         </script>
         """,
         height=0,
@@ -111,7 +119,7 @@ def search_the_web(query, max_results=1):
                                 wiki_link = f"https://{lang}.wikipedia.org/wiki/{formatted_title}"
                                 if len(extract) > 2000 and clean_query in extract.lower():
                                     start_idx = extract.lower().find(clean_query)
-                                    extract = extract[max(0, start_idx-200):start_idx+1300]
+                                    extract = extract[max(0, start_idx-200):start_idx+1500]
                                 return f"• {exact_title} ({wiki_link}): {extract}"
     except:
         pass
@@ -121,7 +129,6 @@ def search_the_web(query, max_results=1):
 with st.sidebar:
     st.header("💬 Οι Συνομιλίες μου")
     
-    # Κουμπί για Δημιουργία Νέου Chat
     if st.button("➕ Νέα Συνομιλία", use_container_width=True, type="primary"):
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         st.session_state.all_chats[new_id] = {
@@ -134,28 +141,30 @@ with st.sidebar:
         
     st.divider()
     
-    # Λίστα Επιλογής Chat (Chat Selector)
     if st.session_state.all_chats:
         chat_options = {k: v["title"] for k, v in st.session_state.all_chats.items()}
+        
+        # Radio Selector που παραμένει σταθερός στο current_chat_id
         selected_chat = st.radio(
             "👉 Επιλέξτε συνομιλία:",
             options=list(chat_options.keys()),
+            index=list(chat_options.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_options else 0,
             format_func=lambda x: chat_options[x]
         )
         if selected_chat != st.session_state.current_chat_id:
             st.session_state.current_chat_id = selected_chat
+            save_chats_to_browser()
             st.rerun()
             
         st.divider()
         
-        # Κουμπί Διαγραφής του Επιλεγμένου Chat
         if st.button("🗑 Διαγραφή τρέχουσας συνομιλίας", use_container_width=True):
             del st.session_state.all_chats[st.session_state.current_chat_id]
             st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
             save_chats_to_browser()
             st.rerun()
     else:
-        st.info("Δεν υπάρχουν αποθηκευμένες συνομιλίες. Πατήστε 'Νέα Συνομιλία'.")
+        st.info("Δεν υπάρχουν συνομιλίες. Πατήστε 'Νέα Συνομιλία'.")
 
     st.divider()
     selected_persona = st.selectbox("🎭 Προσωπικότητα:", list(personalities.keys()))
@@ -167,7 +176,6 @@ if not st.session_state.current_chat_id:
     st.warning("👈 Πατήστε στο κουμπί 'Νέα Συνομιλία' στο Sidebar για να ξεκινήσετε!")
     st.stop()
 
-# Φόρτωση των μηνυμάτων του επιλεγμένου Chat
 active_messages = st.session_state.all_chats[st.session_state.current_chat_id]["messages"]
 
 for msg in active_messages:
@@ -179,14 +187,11 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
     with st.chat_message("user"):
         st.write(user_input)
         
-    # Προσθήκη μηνύματος
     active_messages.append({"role": "user", "content": user_input})
     if len(active_messages) == 1:
         st.session_state.all_chats[st.session_state.current_chat_id]["title"] = user_input[:25] + "..."
         
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
-    
-    # Αποθήκευση στον Browser άμεσα
     save_chats_to_browser()
 
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "hi", "hello"]
@@ -211,13 +216,17 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
 
         with st.spinner("🔍 Αναζήτηση..."):
             results = search_the_web(search_query)
+        # Ενισχυμένες οδηγίες για μέγιστη ανάλυση και προδιαγραφές
+        detailed_instruction = (
+            "\n👉 DETAILED SPECIFICATION MANDATE:\n"
+            "- Provide an exhaustive and ultra-detailed answer. Include every single technical specification available (processor, screen technology, RAM, storage, camera sensors, charging speed, battery capacity, materials, and features).\n"
+            "- Structure your response logically using bold sections and detailed bullet points."
+        )
 
-        # ΦΟΡΤΩΣΗ ΟΔΗΓΙΩΝ TIMELINE (Έτος 2026)
         if results:
-            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE RULE: Today is May 2026. iPhone 17 series and Meta Glasses are already released since late 2025. Answer using this facts."
+            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026. iPhone 17 series released late 2025. Treat as active product." + detailed_instruction
         else:
-            # FALLBACK: Αν η Wikipedia μπλοκάρει, δίνουμε εντολή στο LLM να απαντήσει από τη μνήμη του
-            search_context = "\n\n[SYSTEM FALLBACK NOTICE]: Web search is temporarily unavailable. You are an expert AI in the year 2026. Use your internal pre-trained knowledge to answer accurately about current 2026 products (like iPhone 17 series released in late 2025, Meta Glasses, etc.). DO NOT say they do not exist."
+            search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
 
     full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
     api_messages = [{"role": "system", "content": full_system_prompt}]
@@ -234,7 +243,6 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
-                # Αποθήκευση απάντησης assistant
                 active_messages.append({"role": "assistant", "content": assistant_response})
                 st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
                 
@@ -242,5 +250,3 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
-
-
