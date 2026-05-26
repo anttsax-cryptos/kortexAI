@@ -186,7 +186,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
         
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
     
-    # 🚨 ΠΡΩΤΑ ΑΠΟΘΗΚΕΥΟΥΜΕ ΣΤΟΝ BROWSER
+    # Αποθήκευση στον Browser άμεσα
     save_chats_to_browser()
 
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "hi", "hello"]
@@ -212,10 +212,12 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
         with st.spinner("🔍 Αναζήτηση..."):
             results = search_the_web(search_query)
 
+        # ΦΟΡΤΩΣΗ ΟΔΗΓΙΩΝ TIMELINE (Έτος 2026)
         if results:
-            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026. iPhone 17 series released late 2025. Treat as real product."
+            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE RULE: Today is May 2026. iPhone 17 series and Meta Glasses are already released since late 2025. Answer using this facts."
         else:
-            search_context = "\n\n[SYSTEM NOTICE]: No results found."
+            # FALLBACK: Αν η Wikipedia μπλοκάρει, δίνουμε εντολή στο LLM να απαντήσει από τη μνήμη του
+            search_context = "\n\n[SYSTEM FALLBACK NOTICE]: Web search is temporarily unavailable. You are an expert AI in the year 2026. Use your internal pre-trained knowledge to answer accurately about current 2026 products (like iPhone 17 series released in late 2025, Meta Glasses, etc.). DO NOT say they do not exist."
 
     full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
     api_messages = [{"role": "system", "content": full_system_prompt}]
@@ -236,9 +238,9 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 active_messages.append({"role": "assistant", "content": assistant_response})
                 st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
                 
-                # 🚨 ΔΕΥΤΕΡΗ ΑΠΟΘΗΚΕΥΣΗ ΚΑΙ ΜΕΤΑ RERUN
                 save_chats_to_browser()
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
+
 
