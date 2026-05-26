@@ -147,6 +147,27 @@ with st.sidebar:
         save_chat_history(new_id, [])
         st.rerun()
 
+# --- ΠΡΟΣΘΗΚΗ ΣΤΟ SIDEBAR ΓΙΑ ΑΠΟΘΗΚΕΥΣΗ CHAT ---
+with st.sidebar:
+    st.divider() # Μια οριζόντια γραμμή για διαχωρισμό
+    
+    # Το κουμπί εμφανίζεται μόνο αν η λίστα μηνυμάτων δεν είναι άδεια
+    if st.session_state.messages:
+        # Μετατροπή της λίστας των μηνυμάτων σε καθαρό κείμενο JSON (υποστήριξη Ελληνικών με ensure_ascii=False)
+        chat_json = json.dumps(st.session_state.messages, ensure_ascii=False, indent=4)
+        
+        # Δημιουργία δυναμικού ονόματος αρχείου με την τρέχουσα ημερομηνία και ώρα
+        file_timestamp = datetime.datetime.now().strftime("%d%m_%H%M%S")
+        
+        st.download_button(
+            label="📥 Αποθήκευση συνομιλίας στη συσκευή",
+            data=chat_json,
+            file_name=f"strictex_chat_{file_timestamp}.json",
+            mime="application/json",
+            use_container_width=True # Για να πιάνει όλο το πλάτος του Sidebar
+        )
+
+
     if st.button("🗑 Delete Chat", use_container_width=True, type="primary"):
         file_path = os.path.join(CHATS_DIR, f"{st.session_state.current_chat}.json")
         if os.path.exists(file_path):
