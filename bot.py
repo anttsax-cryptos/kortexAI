@@ -100,33 +100,70 @@ def search_the_web(query, max_results=5):
                     formatted_title = urllib.parse.quote_plus(exact_title)
                     content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
                     
-                    content_response = requests.get(content_url, headers=headers, timeout=4)
-                    if content_response.status_code == 200 and content_response.text.strip():
-                        content_res = content_response.json()
-                        pages = content_res.get("query", {}).get("pages", {})
-                        
-                        for page_id, page_info in pages.items():
-                            extract = page_info.get("extract", "")
-                            if extract.strip():
-                                final_context = f"[WIKIPEDIA FALLBACK]: {extract[:1500]}"
-                                st.session_state.search_cache[clean_query] = final_context
-                                return final_context
-    except Exception as e:
-        st.sidebar.error(f"❌ Wikipedia Fallback failed: {e}")
-        
-    return None
+with st.sidebar:
+    st.title("🤖 StrictexAI Control")
+    
+    # Selection of Persona
+    selected_persona = st.selectbox("Επιλογή Προσωπικότητας Bot:", list(personalities.keys()))
+    
+    st.markdown("---")
+    st.subheader("🔊 Ρυθμίσεις Ήχου")
+    enable_tts = st.toggle("Ενεργοποίηση Φωνής Bot (TTS)", value=False)
+    
+    st.markdown("---")
+    st.subheader("📝 Διαχείριση Συνομιλιών")
+    
+    # ΔΙΟΡΘΩΣΗ: Παίρνουμε μόνο τα ονόματα των αρχείων ως καθαρά strings
+    chat_files = get_all_chats()
+    chat_names = [chat[0] for chat in chat_files]  # Κρατάμε μόνο το όνομα, χωρίς το .json
+    
+    if "current_chat_title" not in st.session_state:
+        if "Default Chat" in chat_names:
+            st.session_state.current_chat_title = "Default Chat"
+        elif chat_names:
+            st.session_state.current_chat_title = chat_names[0]
+        else:
+            st.session_state.current_chat_title = "New Chat"
 
-def text_to_speech(text, lang_code="el"):
-    try:
-        clean_text = text.replace("**", "").replace("*", "").replace("-", "").strip()
-        tts = gTTS(text=clean_text, lang=lang_code, slow=False)
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        return fp.read()
-    except Exception as e:
-        st.sidebar.error(f"❌ TTS Error: {e}")
-        return None
+    # Εξασφάλιση έγκυρης λίστας επιλογών για το selectbox
+    selectable_options = chat_names if chat_names else ["New Chat"]
+    if st.session_state.current_chat_title not in selectable_options:
+        st.session_state.current_chat_title = selectable_options[0]
+
+    selected_chat = st.selectbox(
+        "Επιλέξτε Συνομιλία:", 
+        selectable_options, 
+        index=selectable_options.index(st.session_state.current_chat_title)
+    )
+    
+    if selected_chat != st.session_state.current_chat_title:
+        st.session_state.current_chat_title = selected_chat
+        st.session_state.messages = load_chat_history(selected_chat)
+        st.rerun()
+
+    new_chat_name = st.text_input("Όνομα Νέας Συνομιλίας:")
+    if st.button("➕ Δημιουργία Νέας"):
+        if new_chat_name.strip():
+            st.session_state.current_chat_title = new_chat_name.strip()
+            st.session_state.messages = []
+            save_chat_history(st.session_state.current_chat_title, [])
+            st.rerun()
+
+    if st.button("🗑️ Καθαρισμός Τρέχουσας"):
+        st.session_state.messages = []
+        save_chat_history(st.session_state.current_chat_title, [])
+        st.rerun()
+
+    # Audio Recording Widget in Sidebar
+    st.markdown("---")
+    st.write("🎙️ Μίλησε στο Bot:")
+    audio_rec = mic_recorder(
+        start_prompt="🔴 Έναρξη Εγγραφής",
+        stop_prompt="⏹️ Τέλος & Αποστολή",
+        just_once=True,
+        key="mic"
+    )
+
 
 # 4. Sidebar System & UI
 personalities = {
