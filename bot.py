@@ -179,23 +179,12 @@ with st.sidebar:
             st.session_state.messages = []
             save_chat_history(new_id, [])
 
-        # --- CREDITS AT THE BOTTOM OF SIDEBAR ---
-        st.write("") # Κενός χώρος
-        st.divider()
-        st.caption("ℹ️ **Credits**")
-        st.caption("|Created by Antonis Tsachpinis|")
-        st.caption("|Powered by Streamlit and Groq|")
-
 # --- 5. MAIN INTERFACE & CHAT DISPLAY ---
 st.title("🤖 StrictexAI ChatBot")
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
-        # Αν το μήνυμα είναι του bot, εμφάνισε Credits από κάτω
-        if msg["role"] == "assistant":
-            st.caption("---")
-            st.caption("*Created by Antonis Tsachpinis | Powered by Streamlit and Groq*")
 
 # --- 6. INTELLIGENT ROUTING & RESPONSE ---
 if user_input := st.chat_input("Type your message here..."):
@@ -231,7 +220,7 @@ if user_input := st.chat_input("Type your message here..."):
                 rewrite_res = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=rewrite_messages,
-                    temperature=0.0
+                    temperature=0.3
                 )
                 search_query = rewrite_res.choices[0].message.content.strip()
             except Exception:
@@ -280,7 +269,7 @@ if user_input := st.chat_input("Type your message here..."):
                 chat_completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=api_messages,
-                    temperature=0.4
+                    temperature=0.3
                 )
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
