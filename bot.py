@@ -222,7 +222,6 @@ if user_input := st.chat_input("Type your message here..."):
                 f"User input: {user_input}"
             )
 
-
             rewrite_messages = []
             for msg in st. session_state. messages[- 5:- 1]:
                 rewrite_messages. append({"role": msg["role"], "content": msg["content"]})
