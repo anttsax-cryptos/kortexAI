@@ -13,7 +13,6 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="StrictexAI Chatbot", page_icon="🤖", layout="wide")
 
 # Initialize Groq Client
-# Ensure GROQ_API_KEY is configured in your Streamlit Secrets or Environment Variables
 if "GROQ_API_KEY" in st.secrets:
     api_key = st.secrets["GROQ_API_KEY"]
 elif os.environ.get("GROQ_API_KEY"):
@@ -42,7 +41,7 @@ def save_chat_history(title, history):
 
 def get_all_chats():
     files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
-    return [os.path.splitext(f)[0] for f in files]
+    return [os.path.splitext(f)[0] for f in files]  # Κρατάει μόνο το όνομα ως string
 
 # 3. Core Functions: Live Search & Audio Processing
 def search_the_web(query, max_results=5):
@@ -63,7 +62,7 @@ def search_the_web(query, max_results=5):
 
     context_list = []
     
-    # 1. Primary Live Web Search via DuckDuckGo (With 1 Year Time Limit)
+    # DuckDuckGo Search with 1 Year time limit
     try:
         with DDGS() as ddgs:
             results = ddgs.text(clean_query, max_results=max_results, timelimit='y')
@@ -83,7 +82,7 @@ def search_the_web(query, max_results=5):
     except Exception as e:
         st.sidebar.warning(f"⚠️ DuckDuckGo Search failed: {e}. Trying Wikipedia...")
 
-    # 2. Wikipedia Fallback Strategy (Fully Protected)
+    # Wikipedia Fallback
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
@@ -96,14 +95,50 @@ def search_the_web(query, max_results=5):
                 results = search_res.get("query", {}).get("search", [])
                 
                 if results and len(results) > 0:
-                    exact_title = results[0]["title"] 
+                    exact_title = results[0]["title"]  # Σωστός δείκτης λίστας
                     formatted_title = urllib.parse.quote_plus(exact_title)
                     content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
                     
+                    content_response = requests.get(content_url, headers=headers, timeout=4)
+                    if content_response.status_code == 200 and content_response.text.strip():
+                        content_res = content_response.json()
+                        pages = content_res.get("query", {}).get("pages", {})
+                        
+                        for page_id, page_info in pages.items():
+                            extract = page_info.get("extract", "")
+                            if extract.strip():
+                                final_context = f"[WIKIPEDIA FALLBACK]: {extract[:1500]}"
+                                st.session_state.search_cache[clean_query] = final_context
+                                return final_context
+    except Exception as e:
+        st.sidebar.error(f"❌ Wikipedia Fallback failed: {e}")
+        
+    return None
+
+def text_to_speech(text, lang_code="el"):
+    try:
+        clean_text = text.replace("**", "").replace("*", "").replace("-", "").strip()
+        tts = gTTS(text=clean_text, lang=lang_code, slow=False)
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        return fp.read()
+    except Exception as e:
+        st.sidebar.error(f"❌ TTS Error: {e}")
+        return None
+
+# 4. Sidebar System & UI
+personalities = {
+    "Friendly Assistant": "You are a friendly, conversational, and highly helpful AI assistant. Respond warmly, build natural rapport, and match the user's conversational tone.",
+    "Expert Programmer": "You are an expert software engineer. Provide clean, highly optimized, and well-commented code. Always explain your logic clearly and concisely.",
+    "Sarcastic Buddy": "You are a witty, highly sarcastic, and playful friend. Mix humor, slight mockery, and banter into your answers while still being accurate and helpful.",
+    "Creative Storyteller": "You are an imaginative storyteller. Use rich vocabulary, dramatic pacing, and vivid descriptive imagery to craft captivating narratives.",
+    "Patient Teacher": "You are a patient educator. Explain concepts simply, step-by-step, using clear analogies, straightforward language, and helpful examples."
+}
+
 with st.sidebar:
     st.title("🤖 StrictexAI Control")
     
-    # Selection of Persona
     selected_persona = st.selectbox("Επιλογή Προσωπικότητας Bot:", list(personalities.keys()))
     
     st.markdown("---")
@@ -113,9 +148,7 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("📝 Διαχείριση Συνομιλιών")
     
-    # ΔΙΟΡΘΩΣΗ: Παίρνουμε μόνο τα ονόματα των αρχείων ως καθαρά strings
-    chat_files = get_all_chats()
-    chat_names = [chat[0] for chat in chat_files]  # Κρατάμε μόνο το όνομα, χωρίς το .json
+    chat_names = get_all_chats()
     
     if "current_chat_title" not in st.session_state:
         if "Default Chat" in chat_names:
@@ -125,7 +158,6 @@ with st.sidebar:
         else:
             st.session_state.current_chat_title = "New Chat"
 
-    # Εξασφάλιση έγκυρης λίστας επιλογών για το selectbox
     selectable_options = chat_names if chat_names else ["New Chat"]
     if st.session_state.current_chat_title not in selectable_options:
         st.session_state.current_chat_title = selectable_options[0]
@@ -154,65 +186,6 @@ with st.sidebar:
         save_chat_history(st.session_state.current_chat_title, [])
         st.rerun()
 
-    # Audio Recording Widget in Sidebar
-    st.markdown("---")
-    st.write("🎙️ Μίλησε στο Bot:")
-    audio_rec = mic_recorder(
-        start_prompt="🔴 Έναρξη Εγγραφής",
-        stop_prompt="⏹️ Τέλος & Αποστολή",
-        just_once=True,
-        key="mic"
-    )
-
-
-# 4. Sidebar System & UI
-personalities = {
-    "Friendly Assistant": "You are a friendly, conversational, and highly helpful AI assistant. Respond warmly, build natural rapport, and match the user's conversational tone.",
-    "Expert Programmer": "You are an expert software engineer. Provide clean, highly optimized, and well-commented code. Always explain your logic clearly and concisely.",
-    "Sarcastic Buddy": "You are a witty, highly sarcastic, and playful friend. Mix humor, slight mockery, and banter into your answers while still being accurate and helpful.",
-    "Creative Storyteller": "You are an imaginative storyteller. Use rich vocabulary, dramatic pacing, and vivid descriptive imagery to craft captivating narratives.",
-    "Patient Teacher": "You are a patient educator. Explain concepts simply, step-by-step, using clear analogies, straightforward language, and helpful examples."
-}
-
-with st.sidebar:
-    st.title("🤖 StrictexAI Control")
-    
-    # Selection of Persona
-    selected_persona = st.selectbox("Επιλογή Προσωπικότητας Bot:", list(personalities.keys()))
-    
-    st.markdown("---")
-    st.subheader("🔊 Ρυθμίσεις Ήχου")
-    enable_tts = st.toggle("Ενεργοποίηση Φωνής Bot (TTS)", value=False)
-    
-    st.markdown("---")
-    st.subheader("📝 Διαχείριση Συνομιλιών")
-    
-    # Chat Management Logic
-    all_chats = get_all_chats()
-    if "current_chat_title" not in st.session_state:
-        st.session_state.current_chat_title = "Default Chat" if "Default Chat" in all_chats else ("New Chat" if not all_chats else all_chats[0])
-
-    selected_chat = st.selectbox("Επιλέξτε Συνομιλία:", all_chats if all_chats else ["New Chat"], index=all_chats.index(st.session_state.current_chat_title) if st.session_state.current_chat_title in all_chats else 0)
-    
-    if selected_chat != st.session_state.current_chat_title:
-        st.session_state.current_chat_title = selected_chat
-        st.session_state.messages = load_chat_history(selected_chat)
-        st.rerun()
-
-    new_chat_name = st.text_input("Όνομα Νέας Συνομιλίας:")
-    if st.button("➕ Δημιουργία Νέας"):
-        if new_chat_name.strip():
-            st.session_state.current_chat_title = new_chat_name.strip()
-            st.session_state.messages = []
-            save_chat_history(st.session_state.current_chat_title, [])
-            st.rerun()
-
-    if st.button("🗑️ Καθαρισμός Τρέχουσας"):
-        st.session_state.messages = []
-        save_chat_history(st.session_state.current_chat_title, [])
-        st.rerun()
-
-    # Audio Recording Widget in Sidebar
     st.markdown("---")
     st.write("🎙️ Μίλησε στο Bot:")
     audio_rec = mic_recorder(
@@ -226,15 +199,14 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = load_chat_history(st.session_state.current_chat_title)
 
-# Display existing messages from history
+# Display history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- INPUT MECHANISM PROCESSING ---
+# Input Handling
 user_input = None
 
-# Handle voice transcription from mic recorder
 if audio_rec and "bytes" in audio_rec:
     with st.spinner("🎙️ Μετατροπή φωνής σε κείμενο..."):
         try:
@@ -248,25 +220,22 @@ if audio_rec and "bytes" in audio_rec:
         except Exception as e:
             st.error(f"❌ Σφάλμα μικροφώνου: {e}")
 
-# Handle text fallback from standard chat input
 chat_prompt = st.chat_input("Γράψε ένα μήνυμα ή χρησιμοποίησε το μικρόφωνο...")
 if chat_prompt:
     user_input = chat_prompt
 
 # 6. Response Execution Pipeline
 if user_input:
-    # Append and render user input immediately
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Greeting categorization rules
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
     clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
-    # Initialize Prompt and Context (Fixes NameError)
     search_context = ""
     search_query = user_input
 
-    # Global language detection rule setup
+    has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
+    if has_greek:
