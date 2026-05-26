@@ -230,7 +230,6 @@ if user_input := st.chat_input("Type your message here..."):
         with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
             results = search_the_web(search_query, max_results=5)
                 if results:
-                    # Ανίχνευση αν το input έχει κυρίως ελληνικούς χαρακτήρες
                     # (Αν δεν έχει ελληνικά γράμματα, θεωρούμε ότι είναι Αγγλικά/Ξένη γλώσσα)
                     has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
 
