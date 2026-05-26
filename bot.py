@@ -29,7 +29,6 @@ personalities = {
     "Expert Programmer": "You are a top Senior Software Engineer. Provide highly accurate answers and clean code blocks.",
     "Sarcastic Buddy": "You are a smart, ironic, and sarcastic friend. Use clever humor and light teasing.",
     "Creative Storyteller": "You are an imaginative storyteller. Give a highly creative and engaging tone to your responses.",
-    "Patient Teacher": "You are a patient educator. Explain concepts simply, step-by-step, using clear examples."
 }
 
 # --- 2. HISTORY & SEARCH FUNCTIONS ---
@@ -218,14 +217,15 @@ if user_input := st.chat_input("Type your message here..."):
     if not is_greeting:
         if len(st.session_state.messages) > 1:
             rewriter_prompt = (
-                "You are an AI search query generator. The current year is 2026.\n"
-                "Extract the core subject, entity, or product from the user's input to create a simple, high-probability search query.\n"
-                "RULES:\n"
-                "- Strip out overly specific suffixes if they might limit search results (e.g., instead of 'iPhone 17 Pro Max 256gb', just use 'iPhone 17').\n"
-                "- Keep tech and global products in English keywords.\n"
-                "- Output ONLY the search keywords. No markdown, no quotes, no conversational text.\n\n"
-                f"User input: {user_input}"
+                "You are a search query optimizer. The current year is 2026.\n"
+                "Your job is to convert the user's request into 2-4 English keywords for a search engine.\n"
+                "CRITICAL RULES:\n"
+                "- NEVER remove product generation numbers or model names (e.g., if user says 'iPhone 17' or 'iPhone 16 Pro Max', you MUST keep 'iPhone 17' or 'iPhone 16 Pro Max').\n"
+                "- Strip only conversational filler words (e.g., instead of 'tell me specs of iPhone 17 pro max', output 'iPhone 17 Pro Max specs').\n"
+                "- Keep tech queries in English keywords.\n"
+                "- Output ONLY the final keywords. No explanation, no quotes, no conversational text."
             )
+
             rewrite_messages = []
             for msg in st.session_state.messages[-5:-1]:
                 rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
