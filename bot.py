@@ -6,6 +6,7 @@ import requests
 import urllib.parse
 from groq import Groq
 from duckduckgo_search import DDGS
+from streamlit_mic_recorder import mic_recorder
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
@@ -138,7 +139,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = load_chat_history(st.session_state.current_chat)
 # --- 4. SIDEBAR GRAPHICS (TRANSLATED TO ENGLISH) ---
 with st.sidebar:
-    st.header("⚙ Settings & History")
+    st.header("⚙ Settings")
     
     selected_persona = st.selectbox(
         "🎭 Select Personality:",
@@ -186,6 +187,12 @@ with st.sidebar:
             st.session_state.current_chat = new_id
             st.session_state.messages = []
             save_chat_history(new_id, [])
+  
+    st.markdown("---")
+    st.subheader("🔊 Ρυθμίσεις Ήχου")
+    # Κουμπί On/Off για την ομιλία του Bot
+    enable_tts = st.toggle("Ενεργοποίηση Φωνής Bot (TTS)", value=False)
+
 
 # --- 5. MAIN INTERFACE & CHAT DISPLAY ---
 st.title("🤖 StrictexAI ChatBot")
@@ -194,12 +201,48 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# --- 6. INTELLIGENT ROUTING & RESPONSE ---
-if user_input := st.chat_input("Type your message here..."):
-    
-    with st.chat_message("user"):
-        st.write(user_input)
+# --- ΜΗΧΑΝΙΣΜΟΣ ΕΙΣΑΓΩΓΗΣ (ΚΕΙΜΕΝΟ Ή ΜΙΚΡΟΦΩΝΟ) ---
+user_input = None
+
+# 1. Εμφάνιση του Μικροφώνου (Στο sidebar ή πάνω από το chat input)
+st.sidebar.markdown("---")
+st.sidebar.write("🎙️ Μίλησε στο Bot:")
+audio_rec = mic_recorder(
+    start_prompt="🔴 Έναρξη Εγγραφής",
+    stop_prompt="⏹️ Τέλος & Αποστολή",
+    just_once=True,
+    key="mic"
+)
+
+# Αν ο χρήστης χρησιμοποίησε το μικρόφωνο
+if audio_rec and "bytes" in audio_rec:
+    with st.spinner("🎙️ Μετατροπή φωνής σε κείμενο..."):
+        try:
+            # Στέλνουμε τα bytes του ήχου στο Whisper API της Groq
+            audio_file = ("audio.wav", audio_rec["bytes"], "audio/wav")
+            transcription = client.audio.transcriptions.create(
+                model="whisper-large-v3",
+                file=audio_file
+            )
+            if transcription.text.strip():
+                user_input = transcription.text.strip()
+        except Exception as e:
+            st.error(f"❌ Σφάλμα μικροφώνου: {e}")
+
+# 2. Ελέγχουμε αν γράφτηκε κείμενο στο κανονικό Chat Input
+chat_prompt = st.chat_input("Γράψε ένα μήνυμα ή χρησιμοποίησε το μικρόφωνο...")
+if chat_prompt:
+    user_input = chat_prompt
+
+# ΑΝ ΥΠΑΡΧΕΙ ΕΙΣΑΓΩΓΗ (Είτε από κείμενο είτε από μικρόφωνο), ΕΚΤΕΛΕΙΤΑΙ ΤΟ BOT
+if user_input:
+    # Προσθήκη του μηνύματος στο ιστορικό
     st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    # ... [ΕΔΩ ΣΥΝΕΧΙΖΕΙ ΟΛΟΣ Ο ΥΠΟΛΟΙΠΟΣ ΚΩΔΙΚΑΣ ΣΟΥ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ ΤΟΥ BOT] ...
+
 
     # Skip search logic for greetings
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
