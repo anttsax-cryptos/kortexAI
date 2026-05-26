@@ -235,120 +235,48 @@ if chat_prompt:
     user_input = chat_prompt
 
 # ΑΝ ΥΠΑΡΧΕΙ ΕΙΣΑΓΩΓΗ (Είτε από κείμενο είτε από μικρόφωνο), ΕΚΤΕΛΕΙΤΑΙ ΤΟ BOT
+# ΑΝ ΥΠΑΡΧΕΙ ΕΙΣΑΓΩΓΗ (Είτε από κείμενο είτε από μικρόφωνο), ΕΚΤΕΛΕΙΤΑΙ ΤΟ BOT
 if user_input:
     # Προσθήκη του μηνύματος στο ιστορικό
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # ... [ΕΔΩ ΣΥΝΕΧΙΖΕΙ ΟΛΟΣ Ο ΥΠΟΛΟΙΠΟΣ ΚΩΔΙΚΑΣ ΣΟΥ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ ΤΟΥ BOT] ...
-
-
-    # Skip search logic for greetings
-    greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
-    clean_input = user_input. lower(). strip(). replace("?", ""). replace(".", "")
-    is_greeting = clean_input in greetings or len( clean_input. split()) <= 1
-
-    # --- ΑΡΧΙΚΟΠΟΙΗΣΗ ΜΕΤΑΒΛΗΤΩΝ (DEFAULT VALUES) ---
-    search_context = ""
-    search_query = user_input
-
-    # Ανίχνευση γλώσσας για να επιβληθεί σωστή συμπεριφορά και στους χαιρετισμούς
-    has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
-    if has_greek:
-        lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in Greek. You MUST write your ENTIRE response strictly in Greek."
-    else:
-        lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in English. You MUST write your ENTIRE response strictly in English."
-
-    if not is_greeting:
-        if len(st.session_state.messages) > 1:
-            rewriter_prompt = (
-                "You are a search query optimizer. The current year is 2026.\n"
-                "Your job is to convert the user's request into 2-4 English keywords for a search engine.\n"
-                "CRITICAL RULES:\n"
-                "- NEVER remove product generation numbers or model names (e.g., if user says 'iPhone 17' or 'iPhone 16 Pro Max', you MUST keep 'iPhone 17' or 'iPhone 16 Pro Max').\n"
-                "- Strip only conversational filler words (e.g., instead of 'tell me specs of iPhone 17 pro max', output 'iPhone 17 Pro Max specs').\n"
-                "- Keep tech queries in English keywords.\n"
-                "- Output ONLY the final keywords. No explanation, no quotes, no conversational text."
-            )
-
-            rewrite_messages = []
-            for msg in st.session_state.messages[-5:-1]:
-                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
-            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
-            try:
-                rewrite_res = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=rewrite_messages,
-                    temperature=0.2
-                )
-                search_query = rewrite_res.choices.message.content.strip()
-            except Exception:
-                search_query = user_input
-
-        # Live Web Search
-        with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
-            results = search_the_web(search_query, max_results=5)
-            
-            # Ανίχνευση γλώσσας του χρήστη
-            has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
-            
-            if results:
-                if has_greek:
-                    formatting_rules = (
-                        "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ:\n"
-                        "1. Γράψε την απάντησή σου ΑΠΟΚΛΕΙΣΤΙΚΑ στα Ελληνικά.\n"
-                        "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες.\n"
-                        "3. TIMELINE RULE: Καθώς βρισκόμαστε στον Μάιο του 2026, συσκευές όπως η σειρά Samsung Galaxy S26 έχουν ΉΔΗ κυκλοφορήσει στην αγορά (από τις αρχές του 2026). Μην αναφέρεσαι σε αυτές ως 'φήμες' ή 'μελλοντικά σχέδια', αλλά ως τρέχοντα, υπαρκτά προϊόντα με βάση τα live δεδομένα.\n"
-                    )
-                else:
-                    formatting_rules = (
-                        "👉 RESPONSE INSTRUCTIONS:\n"
-                        "1. Write your entire response STRICTLY in English.\n"
-                        "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories.\n"
-                        "3. TIMELINE RULE: Since we are in May 2026, devices like the Samsung Galaxy S26 series have ALREADY been officially released (early 2026). Do NOT refer to them as 'rumors' or 'speculation'. Treat them as current, active market products based on the web data.\n"
-                    )
-                search_context = f"\n\n[LIVE WEB DATA]:\n{results}\n\n{formatting_rules}"
-
-            else:
-                # --- ΕΞΥΠΝΟ FALLBACK ΑΝ ΑΠΟΤΥΧΟΥΝ ΟΛΕΣ ΟΙ ΑΝΑΖΗΤΗΣΕΙΣ ---
-                if has_greek:
-                    search_context = (
-                        "\n\n[SYSTEM NOTICE]: Η αναζήτηση στο διαδίκτυο δεν επέστρεψε αποτελέσματα. "
-                        "Γνωρίζεις ότι το τρέχον έτος είναι το 2026. Μην πεις ότι το προϊόν δεν υπάρχει ή ότι δεν έχεις πληροφορίες. "
-                        "Απάντησε στα Ελληνικά με βάση τις γνωστές προδιαγραφές, επίσημες κυκλοφορίες ή ευρέως γνωστές βιομηχανικές φήμες "
-                        "μέχρι σήμερα (π.χ. για τη σειρά iPhone 17 που κυκλοφόρησε στα τέλη του 2025, τον επεξεργαστή A19 Pro κλπ)."
-                    )
-                else:
-                    search_context = (
-                        "\n\n[SYSTEM NOTICE]: Web search returned no results. "
-                        "You know the current year is 2026. Do NOT say the product doesn't exist or that you lack info. "
-                        "Answer in English based on established specifications, official releases, or widely known industry rumors "
-                        "up to this point (e.g., regarding the iPhone 17 series released in late 2025, A19 Pro chip, etc.)."
-                    )
-
-    # Τελικό χτίσιμο του prompt
-    time_context = "\n\n[SYSTEM NOTE: The current year is 2026. Keep this timeline in mind for all release dates.]"
-    full_system_prompt = personalities[selected_persona] + time_context + search_context + lang_mirror_rule
-
+    # Προετοιμασία των μηνυμάτων για το API της Groq
     api_messages = [{"role": "system", "content": full_system_prompt}]
-    api_messages.extend(st.session_state.messages[-12:])
+    for msg in st.session_state.messages[-10:]:  # Κρατάει τα τελευταία 10 μηνύματα για μνήμη
+        api_messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Final Chat Generation
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            try:
-                chat_completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=api_messages,
-                    temperature=0.3
-                )
-                assistant_response = chat_completion.choices[0].message.content
-                st.write(assistant_response)
+    # Κλήση του API και λήψη της απάντησης του Bot
+    try:
+        with st.spinner("🤖 Thinking..."):
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",  # Οικονομικό μοντέλο για αποφυγή rate limits
+                messages=api_messages,
+                temperature=0.7
+            )
+            full_response = response.choices[0].message.content.strip()
+
+        # Εμφάνιση της απάντησης του AI στο Chat
+        with st.chat_message("assistant"):
+            st.markdown(full_response)
+            
+            # --- ΕΛΕΓΧΟΣ ΑΝ ΕΙΝΑΙ ΕΝΕΡΓΟΠΟΙΗΜΕΝΟ ΤΟ TOGGLE ΟΜΙΛΙΑΣ ---
+            if enable_tts:
+                response_has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in full_response)
+                audio_lang = "el" if response_has_greek else "en"
                 
-                # Save to state and directory
-                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
-                save_chat_history(st.session_state.current_chat, st.session_state.messages)
-            except Exception as e:
-                st.error(f"Error communicating with Groq: {e}")
+                audio_bytes = text_to_speech(full_response, lang_code=audio_lang)
+                if audio_bytes:
+                    st.audio(audio_bytes, format="audio/mp3")
+
+        # Αποθήκευση της απάντησης του bot στο ιστορικό
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        # Αυτόματη αποθήκευση της συνομιλίας στο τοπικό JSON αρχείο
+        chat_title = st.session_state.get("current_chat_title", "Untitled Chat")
+        save_chat_history(chat_title, st.session_state.messages)
+
+    except Exception as e:
+        st.error(f"❌ Error communicating with Groq: {e}")
 
