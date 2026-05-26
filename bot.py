@@ -229,35 +229,68 @@ if user_input := st.chat_input("Type your message here..."):
         # Live Web Search
         with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
             results = search_the_web(search_query, max_results=5)
-            if results:
-                search_context = (
-                    f"\n\n[LIVE WEB DATA]:\n{results}\n\n"
-                    "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ (Urgently Detailed):\n"
-                    "1. CRITICAL MANDATE: Automatically detect the language that the user used in their last message. You MUST write your entire response STRICTLY in that exact same language (e.g., if the user wrote in Greek, reply in Greek. If they wrote in English, reply in English). Never default to English if the user wrote in Greek.\n"
-                    "2. Θέλω να γράψεις μια εξαιρετικά αναλυτική, πλήρη και επεξηγηματική παρουσίαση, χωρίς να παραλείψεις καμία λεπτομέρεια από τα παραπάνω δεδομένα.\n"
-                    "3. Ανάλογα με το θέμα της ερώτησης, οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες:\n\n"
-                    "📦 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΪΟΝ (π.χ. τηλέφωνο, gadget, αυτοκίνητο, συσκευή):\n"
-                    "- **Γενικές πληροφορίες** / **General Information** (με λίγα λόγια για το τι είναι)\n"
-                    "- **Σχεδιασμός & Χαρακτηριστικά** / **Design & Features** (διαστάσεις, λειτουργίες, πλεονεκτήματα, μειονεκτήματα)\n"
-                    "- **Τιμή** / **Price** (κόστος και διαθεσιμότητα προϊόντος)\n\n"
-                    "📢 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΓΕΓΟΝΟΣ / ΕΙΔΗΣΗ (π.χ. αγώνας, συναυλία, φυσικό φαινόμενο, είδηση):\n"
-                    "- **Γενικό Πλαίσιο** / **General Context** (Πότε και πού συνέβη ή θα συμβεί, ποιοι εμπλέκονται)\n"
-                    "- **Χρονικό & Λεπτομέρειες** / **Timeline & Details** (Αναλυτικά τι συνέβη, φάσεις του γεγονότος, σημαντικές στιγμές)\n"
-                    "- **Αποτέλεσμα / Αντίκτυπος** / **Result / Impact** (Σκορ, δηλώσεις, συνέπειες)\n\n"
-                    "👤 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΣΩΠΟ (π.χ. ιστορικό πρόσωπο, celebrity, επιστήμονας):\n"
-                    "- **Ποιος είναι** / **Who they are** (Ιδιότητα, καταγωγή, σύντομη σύνοψη της φήμης του)\n"
-                    "- **Βιογραφία & Έργο** / **Biography & Career** (Σημαντικά επιτεύγματα, σταθμοί στη ζωή του, ανακαλύψεις)\n"
-                    "- **Κληρονομιά / Αντίκτυπος** / **Legacy / Impact** (Πώς επηρέασε τον κόσμο ή τον τομέα του)\n\n"
-                    "🧠 ΓΙΑ ΟΠΟΙΟΔΗΠΟΤΕ ΑΛΛΟ ΘΕΜΑ (π.χ. επιστήμη, ορισμοί, historia, γενικές ερωτήσεις, οδηγίες):\n"
-                    "- **Ορισμός & Εισαγωγή** / **Definition & Introduction** (Τι σημαίνει η έννοια ή το θέμα με απλά λόγια)\n"
-                    "- **Αναλυτική Ανάλυση** / **In-depth Analysis** (Πώς λειτουργεί, ιστορικό υπόβαθρο, βήματα ή βασικές αρχές)\n"
-                    "- **Σημασία / Εφαρμογές** / **Significance / Applications** (Πού χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n\n"
-                    "Αν κάποια πληροφορία λείπει από τα δεδομένα, μην την εφεύρεις, απλά ανάφερε ό,τι είναι διαθέσιμο με όσο το δυνατόν περισσότερες λεπτομέρειες."
-                )
+                if results:
+                    # Ανίχνευση αν το input έχει κυρίως ελληνικούς χαρακτήρες
+                    # (Αν δεν έχει ελληνικά γράμματα, θεωρούμε ότι είναι Αγγλικά/Ξένη γλώσσα)
+                    has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
 
-    # Final prompt preparation
-    lang_mirror_rule = "\n\nCRITICAL: Automatically detect the language of the user's latest message and reply ONLY in that language. If the user wrote in Greek, translate all the web data into Greek and reply in Greek."
-    full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
+                    if has_greek:
+                        # ΕΛΛΗΝΙΚΟ PROMPT ΜΟΡΦΟΠΟΙΗΣΗΣ
+                        formatting_rules = (
+                            "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ:\n"
+                            "1. Γράψε την απάντησή σου ΑΠΟΚΛΕΙΣΤΙΚΑ στα Ελληνικά.\n"
+                            "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες:\n\n"
+                            "📦 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΪΟΝ:\n"
+                            "- **Γενικές πληροφορίες** (τι είναι με λίγα λόγια)\n"
+                            "- **Σχεδιασμός & Χαρακτηριστικά** (διαστάσεις, λειτουργίες, πλεονεκτήματα, μειονεκτήματα)\n"
+                            "- **Τιμή** (κόστος και διαθεσιμότητα)\n\n"
+                            "📢 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΓΕΓΟΝΟΣ / ΕΙΔΗΣΗ:\n"
+                            "- **Γενικό Πλαίσιο** (Πότε, πού, ποιοι εμπλέκονται)\n"
+                            "- **Χρονικό & Λεπτομέρειες** (Αναλυτικά τι συνέβη, σημαντικές στιγμές)\n"
+                            "- **Αποτέλεσμα / Αντίκτυπος** (Σκορ, δηλώσεις, συνέπειες)\n\n"
+                            "👤 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΣΩΠΟ:\n"
+                            "- **Ποιος είναι** (Ιδιότητα, καταγωγή, σύντομη σύνοψη)\n"
+                            "- **Βιογραφία & Έργο** (Σημαντικά επιτεύγματα, σταθμοί στη ζωή)\n"
+                            "- **Κληρονομιά / Αντίκτυπος** (Πώς επηρέασε τον κόσμο)\n\n"
+                            "🧠 ΓΙΑ ΟΠΟΙΟΔΗΠΟΤΕ ΑΛΛΟ ΘΕΜΑ:\n"
+                            "- **Ορισμός & Εισαγωγή** (Τι σημαίνει η έννοια με απλά λόγια)\n"
+                            "- **Αναλυτική Ανάλυση** (Πώς λειτουργεί, ιστορικό υπόβαθρο, βασικές αρχές)\n"
+                            "- **Σημασία / Εφαρμογές** (Πού χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n"
+                        )
+                        lang_mirror_rule = "\n\nCRITICAL: The user wrote in Greek. Reply STRICTLY in Greek language."
+                    else:
+                        # ENGLISH FORMATTING PROMPT
+                        formatting_rules = (
+                            "👉 RESPONSE INSTRUCTIONS:\n"
+                            "1. Write your entire response STRICTLY in English.\n"
+                            "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories:\n\n"
+                            "📦 IF IT IS A PRODUCT:\n"
+                            "- **General Information** (briefly what it is)\n"
+                            "- **Design & Features** (specifications, functions, pros, cons)\n"
+                            "- **Price** (cost and product availability)\n\n"
+                            "📢 IF IT IS AN EVENT / NEWS:\n"
+                            "- **General Context** (When and where it happened, who is involved)\n"
+                            "- **Timeline & Details** (Detailed events, phases, key moments)\n"
+                            "- **Result / Impact** (Scores, statements, consequences)\n\n"
+                            "👤 IF IT IS A PERSON:\n"
+                            "- **Who they are** (Profession, origin, brief summary of fame)\n"
+                            "- **Biography & Career** (Major achievements, milestones, discoveries)\n"
+                            "- **Legacy / Impact** (How they influenced the world or their field)\n\n"
+                            "🧠 FOR ANY OTHER TOPIC:\n"
+                            "- **Definition & Introduction** (What the concept means in simple words)\n"
+                            "- **In-depth Analysis** (How it works, historical background, core principles)\n"
+                            "- **Significance / Applications** (Where it is used, why it matters today)\n"
+                        )
+                        lang_mirror_rule = "\n\nCRITICAL: The user wrote in English. Reply STRICTLY in English language."
+
+                    search_context = (
+                        f"\n\n[LIVE WEB DATA]:\n{results}\n\n"
+                        f"{formatting_rules}"
+                        "If any information is missing from the data, do not invent it, just report what is available."
+                    )
+
+        # Final prompt preparation
+        full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
     
     api_messages = [{"role": "system", "content": full_system_prompt}]
     api_messages.extend(st.session_state.messages[-12:])
