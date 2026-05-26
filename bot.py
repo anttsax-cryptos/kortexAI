@@ -200,10 +200,17 @@ if user_input := st.chat_input("Type your message here..."):
 
     # --- ΑΡΧΙΚΟΠΟΙΗΣΗ ΜΕΤΑΒΛΗΤΩΝ (DEFAULT VALUES) ---
     search_context = ""
-    lang_mirror_rule = ""
     search_query = user_input
 
+    # Ανίχνευση γλώσσας για να επιβληθεί σωστή συμπεριφορά και στους χαιρετισμούς
+    has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
+    if has_greek:
+        lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in Greek. You MUST write your ENTIRE response strictly in Greek."
+    else:
+        lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in English. You MUST write your ENTIRE response strictly in English."
+
     if not is_greeting:
+
         if len( st. session_state. messages) > 1:
             rewriter_prompt = (
                 "You are a search assistant. Based on the user's latest input and conversation history, "
