@@ -88,29 +88,36 @@ def search_the_web(query, max_results=5):
     except Exception as e:
         st.sidebar.warning(f"⚠️ DuckDuckGo Search failed: {e}. Trying Wikipedia...")
 
-    # 2. Wikipedia Fallback Strategy (FIXED INDEX BUG)
+    # 2. Wikipedia Fallback Strategy (Fully Protected & Fixed Index)
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
         for lang in ["el", "en"]:
             search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
-            search_res = requests.get(search_url, headers=headers, timeout=4).json()
-            results = search_res.get("query", {}).get("search", [])
+            response = requests.get(search_url, headers=headers, timeout=4)
             
-            if results and len(results) > 0:
-                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] γιατί το results είναι λίστα από dicts
-                exact_title = results[0]["title"] 
-                formatted_title = urllib.parse.quote_plus(exact_title)
-                content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
-                content_res = requests.get(content_url, headers=headers, timeout=4).json()
-                pages = content_res.get("query", {}).get("pages", {})
+            # Έλεγχος αν η απάντηση είναι έγκυρη πριν το JSON parsing
+            if response.status_code == 200 and response.text.strip():
+                search_res = response.json()
+                results = search_res.get("query", {}).get("search", [])
                 
-                for page_id, page_info in pages.items():
-                    extract = page_info.get("extract", "")
-                    if extract.strip():
-                        final_context = f"[WIKIPEDIA FALLBACK]: {extract[:1500]}"
-                        st.session_state.search_cache[clean_query] = final_context
-                        return final_context
+                if results and len(results) > 0:
+                    # ΔΙΟΡΘΩΣΗ: Προσθήκη [0] επειδή το results είναι λίστα
+                    exact_title = results[0]["title"] 
+                    formatted_title = urllib.parse.quote_plus(exact_title)
+                    content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
+                    
+                    content_response = requests.get(content_url, headers=headers, timeout=4)
+                    if content_response.status_code == 200 and content_response.text.strip():
+                        content_res = content_response.json()
+                        pages = content_res.get("query", {}).get("pages", {})
+                        
+                        for page_id, page_info in pages.items():
+                            extract = page_info.get("extract", "")
+                            if extract.strip():
+                                final_context = f"[WIKIPEDIA FALLBACK]: {extract[:1500]}"
+                                st.session_state.search_cache[clean_query] = final_context
+                                return final_context
     except Exception as e:
         st.sidebar.error(f"❌ Wikipedia Fallback failed: {e}")
         
