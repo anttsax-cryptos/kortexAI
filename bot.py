@@ -53,56 +53,55 @@ def save_chat_history(chat_id, messages):
 
 def search_the_web(query, max_results=1):
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
-    clean_query = query. lower()
+    clean_query = query.lower()
     for word in stop_words:
-        clean_query = clean_query. replace( word, "")
-    clean_query = clean_query. strip()
+        clean_query = clean_query.replace(word, "")
+    clean_query = clean_query.strip()
     
     if not clean_query:
         return None
         
-    if "search_cache" not in st. session_state:
-        st. session_state. search_cache = {}
+    if "search_cache" not in st.session_state:
+        st.session_state.search_cache = {}
         
-    if clean_query in st. session_state. search_cache:
-        return st. session_state. search_cache[ clean_query]
+    if clean_query in st.session_state.search_cache:
+        return st.session_state.search_cache[clean_query]
         
-    # ΑΠΟΚΛΕΙΣΤΙΚΗ ΑΝΑΖΗΤΗΣΗ ΣΤΗ WIKIPEDIA
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
-        formatted_query = urllib. parse. quote_plus( clean_query)
+        formatted_query = urllib.parse.quote_plus(clean_query)
         
-        # Πρώτα ψάχνει στα Ελληνικά και αν δεν βρει, ψάχνει στα Αγγλικά
         for lang in ["el", "en"]:
-            search_url = f"https://{ lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={ formatted_query} &srlimit=1&format=json"
-            response = requests. get( search_url, headers= headers, timeout= 4)
+            search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
+            response = requests.get(search_url, headers=headers, timeout=4)
             
-            if response. status_code == 200 and response. text. strip():
-                search_res = response. json()
-                results = search_res. get("query", {}). get("search", [])
+            if response.status_code == 200 and response.text.strip():
+                search_res = response.json()
+                results = search_res.get("query", {}).get("search", [])
                 
-                if results and len( results) > 0:
-                    exact_title = results[ 0]["title"]
-                    formatted_title = urllib. parse. quote_plus( exact_title)
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη του δείκτη [0] για να πάρουμε το πρώτο αποτέλεσμα της λίστας
+                if results and len(results) > 0:
+                    exact_title = results[0]["title"]
+                    formatted_title = urllib.parse.quote_plus(exact_title)
                     
-                    # Λήψη της εισαγωγής του άρθρου (plain text)
-                    content_url = f"https://{ lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles={ formatted_title} &format=json"
-                    content_response = requests. get( content_url, headers= headers, timeout= 4)
+                    content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles={formatted_title}&format=json"
+                    content_response = requests.get(content_url, headers=headers, timeout=4)
                     
-                    if content_response. status_code == 200 and content_response. text. strip():
-                        content_res = content_response. json()
-                        pages = content_res. get("query", {}). get("pages", {})
-                        for page_id, page_info in pages. items():
-                            extract = page_info. get("extract", "")
-                            if extract. strip():
-                                wiki_link = f"https://{ lang}.wikipedia.org/wiki/{ formatted_title}"
-                                final_context = f"• { exact_title} ({ wiki_link}): { extract[:1500]}"
-                                st. session_state. search_cache[ clean_query] = final_context
+                    if content_response.status_code == 200 and content_response.text.strip():
+                        content_res = content_response.json()
+                        pages = content_res.get("query", {}).get("pages", {})
+                        for page_id, page_info in pages.items():
+                            extract = page_info.get("extract", "")
+                            if extract.strip():
+                                wiki_link = f"https://{lang}.wikipedia.org/wiki/{formatted_title}"
+                                final_context = f"• {exact_title} ({wiki_link}): {extract[:1500]}"
+                                st.session_state.search_cache[clean_query] = final_context
                                 return final_context
     except Exception as e:
-        st. sidebar. error( f"❌ Wikipedia Search failed: { e}")
+        st.sidebar.error(f"❌ Wikipedia Search failed: {e}")
         
     return None
+
     
 # --- 3. INITIALIZE SESSION STATE ---
 if "current_chat" not in st.session_state:
