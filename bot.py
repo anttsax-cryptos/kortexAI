@@ -6,6 +6,7 @@ import urllib.parse
 import streamlit.components.v1 as components
 from groq import Groq
 from streamlit_local_storage import LocalStorage
+import time
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="StrictexAI Ultra", layout="wide", page_icon="🤖")
@@ -48,11 +49,17 @@ if saved_chats_raw and not st.session_state.all_chats:
         pass
 
 def save_chats_to_browser():
-    """Αποθηκεύει άμεσα τα δεδομένα στον browser"""
+    """Αποθηκεύει άμεσα τα δεδομένα στον browser με μοναδικό key για να αποφευχθεί το duplicate error"""
     all_data_json = json.dumps(st.session_state.all_chats)
-    local_storage.setItem("strictex_multichats", all_data_json)
+    
+    # Χρησιμοποιούμε το timestamp ως μοναδικό key για το Streamlit component
+    unique_key_1 = f"save_chats_{time.time()}"
+    local_storage.setItem("strictex_multichats", all_data_json, key=unique_key_1)
+    
     if st.session_state.current_chat_id:
-        local_storage.setItem("strictex_active_chat_id", st.session_state.current_chat_id)
+        unique_key_2 = f"save_active_{time.time()}"
+        local_storage.setItem("strictex_active_chat_id", st.session_state.current_chat_id, key=unique_key_2)
+        
         
 
 # --- 3. WIKIPEDIA SEARCH FUNCTION ---
