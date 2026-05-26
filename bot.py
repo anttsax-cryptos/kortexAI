@@ -53,7 +53,7 @@ def save_chat_history(chat_id, messages):
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 def search_the_web(query, max_results=5):
-    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is","information about","who is"]
+    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
     clean_query = query.lower()
     for word in stop_words:
         clean_query = clean_query.replace(word, "")
@@ -74,20 +74,21 @@ def search_the_web(query, max_results=5):
     try:
         with DDGS() as ddgs:
             results = ddgs.text(clean_query, max_results=max_results)
-            for item in results:
-                title = item.get("title", "")
-                snippet = item.get("body", "")
-                link = item.get("href", "")
-                context_list.append(f"• {title} ({link}): {snippet}")
-                
-            if context_list:
-                final_context = "\n\n".join(context_list)
-                st.session_state.search_cache[clean_query] = final_context
-                return final_context
+            if results:
+                for item in results:
+                    title = item.get("title", "")
+                    snippet = item.get("body", "")
+                    link = item.get("href", "")
+                    context_list.append(f"• {title} ({link}): {snippet}")
+                    
+                if context_list:
+                    final_context = "\n\n".join(context_list)
+                    st.session_state.search_cache[clean_query] = final_context
+                    return final_context
     except Exception as e:
         st.sidebar.warning(f"⚠️ DuckDuckGo Search failed: {e}. Trying Wikipedia...")
 
-    # 2. Wikipedia Fallback Strategy (FIXED BUG HERE)
+    # 2. Wikipedia Fallback Strategy (FIXED INDEX BUG)
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
@@ -96,8 +97,8 @@ def search_the_web(query, max_results=5):
             search_res = requests.get(search_url, headers=headers, timeout=4).json()
             results = search_res.get("query", {}).get("search", [])
             
-            if results:
-                # ΔΙΟΡΘΩΣΗ: Το results είναι λίστα, οπότε παίρνουμε το πρώτο στοιχείο [0]
+            if results and len(results) > 0:
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] γιατί το results είναι λίστα από dicts
                 exact_title = results[0]["title"] 
                 formatted_title = urllib.parse.quote_plus(exact_title)
                 content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
@@ -114,6 +115,7 @@ def search_the_web(query, max_results=5):
         st.sidebar.error(f"❌ Wikipedia Fallback failed: {e}")
         
     return None
+
 
 # --- 3. INITIALIZE SESSION STATE ---
 if "current_chat" not in st.session_state:
