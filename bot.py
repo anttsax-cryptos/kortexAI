@@ -253,14 +253,17 @@ if user_input := st.chat_input("Type your message here..."):
                         "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ:\n"
                         "1. Γράψε την απάντησή σου ΑΠΟΚΛΕΙΣΤΙΚΑ στα Ελληνικά.\n"
                         "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες.\n"
+                        "3. TIMELINE RULE: Καθώς βρισκόμαστε στον Μάιο του 2026, συσκευές όπως η σειρά Samsung Galaxy S26 έχουν ΉΔΗ κυκλοφορήσει στην αγορά (από τις αρχές του 2026). Μην αναφέρεσαι σε αυτές ως 'φήμες' ή 'μελλοντικά σχέδια', αλλά ως τρέχοντα, υπαρκτά προϊόντα με βάση τα live δεδομένα.\n"
                     )
                 else:
                     formatting_rules = (
                         "👉 RESPONSE INSTRUCTIONS:\n"
                         "1. Write your entire response STRICTLY in English.\n"
                         "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories.\n"
+                        "3. TIMELINE RULE: Since we are in May 2026, devices like the Samsung Galaxy S26 series have ALREADY been officially released (early 2026). Do NOT refer to them as 'rumors' or 'speculation'. Treat them as current, active market products based on the web data.\n"
                     )
                 search_context = f"\n\n[LIVE WEB DATA]:\n{results}\n\n{formatting_rules}"
+
             else:
                 # --- ΕΞΥΠΝΟ FALLBACK ΑΝ ΑΠΟΤΥΧΟΥΝ ΟΛΕΣ ΟΙ ΑΝΑΖΗΤΗΣΕΙΣ ---
                 if has_greek:
