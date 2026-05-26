@@ -213,12 +213,16 @@ if user_input := st.chat_input("Type your message here..."):
 
         if len( st. session_state. messages) > 1:
             rewriter_prompt = (
-                "You are a search assistant. Based on the user's latest input and conversation history, "
-                "write a short, optimized search query (keywords) for DuckDuckGo or Wikipedia. "
-                "If the query is technical or about international products, prefer English keywords. "
-                "Respond STRICTLY with the keywords only, nothing else. Do not change the user's intent.\n\n"
-                f"User input: { user_input}"
+                "You are an expert search query optimizer. The current year is 2026. "
+                "Based on the user's latest input and conversation history, write a short, "
+                "highly optimized search query (keywords only) for DuckDuckGo or Wikipedia. "
+                "CRITICAL: If the user asks about recent products, tech, or events (like iPhone 16, iPhone 17, Galaxy S25, Galaxy S26), "
+                "make sure to include the exact model name and optionally the year '2025' or '2026' to get the latest live web data. "
+                "If the query is technical, prefer English keywords.\n"
+                "Respond STRICTLY with the keywords only, nothing else. Do not add quotes, introduction or explanations.\n\n"
+                f"User input: {user_input}"
             )
+
             rewrite_messages = []
             for msg in st. session_state. messages[- 5:- 1]:
                 rewrite_messages. append({"role": msg["role"], "content": msg["content"]})
