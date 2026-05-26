@@ -160,7 +160,7 @@ with st.sidebar:
         file_timestamp = datetime.datetime.now().strftime("%d%m_%H%M%S")
         
         st.download_button(
-            label="📥 Αποθήκευση συνομιλίας στη συσκευή",
+            label="📥 Save chat",
             data=chat_json,
             file_name=f"strictex_chat_{file_timestamp}.json",
             mime="application/json",
