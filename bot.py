@@ -229,8 +229,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                     messages=api_messages,
                     temperature=0.3
                 )
-              assistant_response = chat_completion.choices[0].message.content
-
+                assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
                 # Αποθήκευση απάντησης assistant
@@ -242,3 +241,4 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
+
