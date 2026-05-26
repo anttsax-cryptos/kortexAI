@@ -205,7 +205,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
                 temperature=0.1
             )
-            search_query = rewrite_res.choices.message.content.strip()
+            search_query = rewrite_res.choices[0].message.content.strip()
         except:
             search_query = user_input
 
@@ -229,7 +229,8 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                     messages=api_messages,
                     temperature=0.3
                 )
-                assistant_response = chat_completion.choices.message.content
+               assistant_response = chat_completion.choices[0].message.content
+
                 st.write(assistant_response)
                 
                 # Αποθήκευση απάντησης assistant
