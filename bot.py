@@ -317,7 +317,7 @@ if user_input:
             response = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
                 messages=api_messages,
-                temperature=0.7
+                temperature=0.3
             )
             # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] για να διαβαστεί σωστά το completion object
             full_response = response.choices[0].message.content.strip()
@@ -332,7 +332,7 @@ if user_input:
                 
                 audio_bytes = text_to_speech(full_response, lang_code=audio_lang)
                 if audio_bytes:
-                    st.audio(audio_bytes, format="audio/mp3")
+                    st.audio(audio_bytes, format="audio/mp3", autoplay = True)
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
         chat_title = st.session_state.get("current_chat_title", "Untitled Chat")
