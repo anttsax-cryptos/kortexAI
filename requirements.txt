@@ -6,3 +6,4 @@ duckduckgo-search
 duckduckgo-search>=6.0.0
 streamlit-mic-recorder
 gTTS
+streamlit-local-storage
