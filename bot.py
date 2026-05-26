@@ -196,7 +196,7 @@ if user_input := st.chat_input("Type your message..."):
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
     save_chats_to_browser()
 
-    greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you"]
+    greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you","γεια φιλαρακο","hey buddy"]
     clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
