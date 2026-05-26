@@ -216,96 +216,71 @@ if user_input := st.chat_input("Type your message here..."):
         lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in English. You MUST write your ENTIRE response strictly in English."
 
     if not is_greeting:
-
-        if len( st. session_state. messages) > 1:
+        if len(st.session_state.messages) > 1:
             rewriter_prompt = (
                 "You are an AI search query generator. The current year is 2026.\n"
                 "Extract the core subject, entity, or product from the user's input to create a simple, high-probability search query.\n"
                 "RULES:\n"
-                "- Strip out overly specific suffixes if they might limit search results (e.g., instead of 'iPhone 17 Pro Max 256gb space gray', just use 'iPhone 17 Pro Max').\n"
+                "- Strip out overly specific suffixes if they might limit search results (e.g., instead of 'iPhone 17 Pro Max 256gb', just use 'iPhone 17').\n"
                 "- Keep tech and global products in English keywords.\n"
                 "- Output ONLY the search keywords. No markdown, no quotes, no conversational text.\n\n"
                 f"User input: {user_input}"
             )
-
             rewrite_messages = []
-            for msg in st. session_state. messages[- 5:- 1]:
-                rewrite_messages. append({"role": msg["role"], "content": msg["content"]})
-            rewrite_messages. append({"role": "user", "content": rewriter_prompt})
+            for msg in st.session_state.messages[-5:-1]:
+                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
+            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
             try:
-                rewrite_res = client. chat. completions. create(
+                rewrite_res = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages= rewrite_messages,
-                    temperature= 0.0
+                    messages=rewrite_messages,
+                    temperature=0.0
                 )
-                search_query = rewrite_res. choices[ 0]. message. content. strip()
+                search_query = rewrite_res.choices.message.content.strip()
             except Exception:
                 search_query = user_input
 
         # Live Web Search
-        with st. spinner( f"🔍 Searching the web for '{ search_query}'..."):
-            results = search_the_web( search_query, max_results= 5)
+        with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
+            results = search_the_web(search_query, max_results=5)
+            
+            # Ανίχνευση γλώσσας του χρήστη
+            has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
+            
             if results:
-                # Ανίχνευση αν το input έχει κυρίως ελληνικούς χαρακτήρες
-                has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
-
                 if has_greek:
-                    # ΕΛΛΗΝΙΚΟ PROMPT ΜΟΡΦΟΠΟΙΗΣΗΣ
                     formatting_rules = (
                         "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ:\n"
                         "1. Γράψε την απάντησή σου ΑΠΟΚΛΕΙΣΤΙΚΑ στα Ελληνικά.\n"
-                        "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες:\n\n"
-                        "📦 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΪΟΝ:\n"
-                        "- **Γενικές πληροφορίες** (τι είναι με λίγα λόγια)\n"
-                        "- **Σχεδιασμός & Χαρακτηριστικά** (διαστάσεις, λειτουργίες, πλεονεκτήματα, μειονεκτήματα)\n"
-                        "- **Τιμή** (κόστος και διαθεσιμότητα)\n\n"
-                        "📢 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΓΕΓΟΝΟΣ / ΕΙΔΗΣΗ:\n"
-                        "- **Γενικό Πλαίσιο** (Πότε, πού, ποιοι εμπλέκονται)\n"
-                        "- **Χρονικό & Λεπτομέρειες** (Αναλυτικά τι συνέβη, σημαντικές στιγμές)\n"
-                        "- **Αποτέλεσμα / Αντίκτυπος** (Σκορ, δηλώσεις, συνέπειες)\n\n"
-                        "👤 ΑΝ ΠΡΟΚΕΙΤΑΙ ΓΙΑ ΠΡΟΣΩΠΟ:\n"
-                        "- **Ποιος είναι** (Ιδιότητα, καταγωγή, σύντομη σύνοψη)\n"
-                        "- **Βιογραφία & Έργο** (Σημαντικά επιτεύγματα, σταθμοί στη ζωή)\n"
-                        "- **Κληρονομιά / Αντίκτυπος** (Πώς επηρέασε τον κόσμο)\n\n"
-                        "🧠 ΓΙΑ ΟΠΟΙΟΔΗΠΟΤΕ ΑΛΛΟ ΘΕΜΑ:\n"
-                        "- **Ορισμός & Εισαγωγή** (Τι σημαίνει η έννοια με απλά λόγια)\n"
-                        "- **Αναλυτική Ανάλυση** (Πώς λειτουργεί, ιστορικό υπόβαθρο, βασικές αρχές)\n"
-                        "- **Σημασία / Εφαρμογές** (Πώς χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n"
+                        "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες.\n"
                     )
-                    lang_mirror_rule = "\n\nCRITICAL: The user wrote in Greek. Reply STRICTLY in Greek language."
                 else:
-                    # ENGLISH FORMATTING PROMPT
                     formatting_rules = (
                         "👉 RESPONSE INSTRUCTIONS:\n"
                         "1. Write your entire response STRICTLY in English.\n"
-                        "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories:\n\n"
-                        "📦 IF IT IS A PRODUCT:\n"
-                        "- **General Information** (briefly what it is)\n"
-                        "- **Design & Features** (specifications, functions, pros, cons)\n"
-                        "- **Price** (cost and product availability)\n\n"
-                        "📢 IF IT IS AN EVENT / NEWS:\n"
-                        "- **General Context** (When and where it happened, who is involved)\n"
-                        "- **Timeline & Details** (Detailed events, phases, key moments)\n"
-                        "- **Result / Impact** (Scores, statements, consequences)\n\n"
-                        "👤 IF IT IS A PERSON:\n"
-                        "- **Who they are** (Profession, origin, brief summary of fame)\n"
-                        "- **Biography & Career** (Major achievements, milestones, discoveries)\n"
-                        "- **Legacy / Impact** (How they influenced the world or their field)\n\n"
-                        "🧠 FOR ANY OTHER TOPIC:\n"
-                        "- **Definition & Introduction** (What the concept means in simple words)\n"
-                        "- **In-depth Analysis** (How it works, historical background, core principles)\n"
-                        "- **Significance / Applications** (Where it is used, why it matters today)\n"
+                        "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories.\n"
                     )
-                    lang_mirror_rule = "\n\nCRITICAL: The user wrote in English. Reply STRICTLY in English language."
+                search_context = f"\n\n[LIVE WEB DATA]:\n{results}\n\n{formatting_rules}"
+            else:
+                # --- ΕΞΥΠΝΟ FALLBACK ΑΝ ΑΠΟΤΥΧΟΥΝ ΟΛΕΣ ΟΙ ΑΝΑΖΗΤΗΣΕΙΣ ---
+                if has_greek:
+                    search_context = (
+                        "\n\n[SYSTEM NOTICE]: Η αναζήτηση στο διαδίκτυο δεν επέστρεψε αποτελέσματα. "
+                        "Γνωρίζεις ότι το τρέχον έτος είναι το 2026. Μην πεις ότι το προϊόν δεν υπάρχει ή ότι δεν έχεις πληροφορίες. "
+                        "Απάντησε στα Ελληνικά με βάση τις γνωστές προδιαγραφές, επίσημες κυκλοφορίες ή ευρέως γνωστές βιομηχανικές φήμες "
+                        "μέχρι σήμερα (π.χ. για τη σειρά iPhone 17 που κυκλοφόρησε στα τέλη του 2025, τον επεξεργαστή A19 Pro κλπ)."
+                    )
+                else:
+                    search_context = (
+                        "\n\n[SYSTEM NOTICE]: Web search returned no results. "
+                        "You know the current year is 2026. Do NOT say the product doesn't exist or that you lack info. "
+                        "Answer in English based on established specifications, official releases, or widely known industry rumors "
+                        "up to this point (e.g., regarding the iPhone 17 series released in late 2025, A19 Pro chip, etc.)."
+                    )
 
-                search_context = (
-                    f"\n\n[LIVE WEB DATA]:\n{results}\n\n"
-                    f"{formatting_rules}"
-                    "If any information is missing from the data, do not invent it, just report what is available."
-                )
-
-    # Final prompt preparation (Εξασφαλίζει ότι υπάρχει πάντα τιμή, ακόμα και αν το search_context είναι κενό)
-    full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
+    # Τελικό χτίσιμο του prompt
+    time_context = "\n\n[SYSTEM NOTE: The current year is 2026. Keep this timeline in mind for all release dates.]"
+    full_system_prompt = personalities[selected_persona] + time_context + search_context + lang_mirror_rule
 
     api_messages = [{"role": "system", "content": full_system_prompt}]
     api_messages.extend(st.session_state.messages[-12:])
