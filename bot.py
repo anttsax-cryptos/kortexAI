@@ -127,8 +127,8 @@ def search_the_web(query, max_results=1):
 
 # --- 4. SIDEBAR & CHAT SELECTOR ---
 with st.sidebar:
+    st.caption("[Ai can make mistakes]")
     st.header("💬 Οι Συνομιλίες μου")
-    st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
     
     if st.button("➕ Νέα Συνομιλία", use_container_width=True, type="primary"):
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -169,7 +169,7 @@ with st.sidebar:
 
     st.divider()
     selected_persona = st.selectbox("🎭 Προσωπικότητα:", list(personalities.keys()))
-    st.caption("[AI can make mistakes]")
+    st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
 
 # --- 5. MAIN INTERFACE ---
 st.title("🤖 StrictexAI Hub")
