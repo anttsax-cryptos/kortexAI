@@ -251,6 +251,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 
                 active_messages.append({"role": "assistant", "content": assistant_response})
                 st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
+                st.caption("[Ai can make mistakes]")
                 
                 save_chats_to_browser()
                 st.rerun()
