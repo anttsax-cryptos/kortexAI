@@ -76,9 +76,12 @@ def search_the_web(query, max_results=5):
             if results:
                 for item in results:
                     title = item.get("title", "")
-                    snippet = item.get("body", "")
-                    link = item.get("href", "")
-                    context_list.append(f"• {title} ({link}): {snippet}")
+                    # ΕΛΕΓΧΟΣ ΓΙΑ ΟΛΑ ΤΑ ΠΙΘΑΝΑ ΚΛΕΙΔΙΑ ΤΟΥ DUCKDUCKGO API
+                    snippet = item.get("body") or item.get("snippet") or item.get("text") or ""
+                    link = item.get("href") or item.get("link") or ""
+                    
+                    if snippet:
+                        context_list.append(f"• {title} ({link}): {snippet}")
                     
                 if context_list:
                     final_context = "\n\n".join(context_list)
@@ -87,7 +90,7 @@ def search_the_web(query, max_results=5):
     except Exception as e:
         st.sidebar.warning(f"⚠️ DuckDuckGo Search failed: {e}. Trying Wikipedia...")
 
-    # 2. Wikipedia Fallback Strategy (Fully Protected & Fixed Index)
+    # 2. Wikipedia Fallback Strategy
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
@@ -95,13 +98,12 @@ def search_the_web(query, max_results=5):
             search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
             response = requests.get(search_url, headers=headers, timeout=4)
             
-            # Έλεγχος αν η απάντηση είναι έγκυρη πριν το JSON parsing
             if response.status_code == 200 and response.text.strip():
                 search_res = response.json()
                 results = search_res.get("query", {}).get("search", [])
                 
                 if results and len(results) > 0:
-                    # ΔΙΟΡΘΩΣΗ: Προσθήκη [0] επειδή το results είναι λίστα
+                    # Σωστή λήψη του τίτλου από τη λίστα
                     exact_title = results[0]["title"] 
                     formatted_title = urllib.parse.quote_plus(exact_title)
                     content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
