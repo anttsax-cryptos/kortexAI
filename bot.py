@@ -1,29 +1,20 @@
 import streamlit as st
 import json
-import os
 import datetime
 import requests
 import urllib.parse
+import streamlit.components.v1 as components
 from groq import Groq
-from duckduckgo_search import DDGS
 
 # --- 1. PAGE CONFIGURATION ---
-st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="StrictexAI Local Chats", layout="wide", page_icon="🤖")
 
-# Directory for saving chat history locally
-CHATS_DIR = "chats"
-if not os.path.exists(CHATS_DIR):
-    os.makedirs(CHATS_DIR)
-
-# Check for API Key in Streamlit Secrets
 if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠ Please add your GROQ_API_KEY in Streamlit Secrets!")
     st.stop()
 
-# Initialize Groq Client
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# System Prompts / Personas
 personalities = {
     "Friendly Assistant": "You are StrictexAI, a very friendly, polite, and helpful assistant.",
     "Expert Programmer": "You are a top Senior Software Engineer. Provide highly accurate answers and clean code blocks.",
@@ -31,26 +22,53 @@ personalities = {
     "Creative Storyteller": "You are an imaginative storyteller. Give a highly creative and engaging tone to your responses.",
 }
 
-# --- 2. HISTORY & SEARCH FUNCTIONS ---
-def get_all_chats():
-    if not os.path.exists(CHATS_DIR):
-        return []
-    files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
-    files.sort(key=lambda x: os.path.getmtime(os.path.join(CHATS_DIR, x)), reverse=True)
-    return [os.path.splitext(f) for f in files]
+# --- 2. JAVASCRIPT MECHANISM FOR MULTIPLE CHATS ---
+# Αρχικοποίηση των δομών στη μνήμη του Streamlit
+if "all_chats" not in st.session_state:
+    st.session_state.all_chats = {}  # {chat_id: {"title": ..., "messages": [...]}}
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = None
+if "js_sync_done" not in st.session_state:
+    st.session_state.js_sync_done = False
 
-def load_chat_history(chat_id):
-    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+# JavaScript για ανάκτηση όλων των συνομιλιών από τον Browser κατά το Load
+if not st.session_state.js_sync_done:
+    js_load_all = """
+    <script>
+        const savedData = localStorage.getItem("strictex_multichats");
+        if (savedData) {
+            window.parent.postMessage({type: "LOAD_ALL_CHATS", data: JSON.parse(savedData)}, "*");
+        } else {
+            window.parent.postMessage({type: "LOAD_ALL_CHATS", data: {}}, "*");
+        }
+    </script>
+    """
+    components.html(js_load_all, height=0, width=0)
 
-def save_chat_history(chat_id, messages):
-    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(messages, f, ensure_ascii=False, indent=4)
+# Διαχείριση των μηνυμάτων JavaScript από την Python (μέσω query params για συγχρονισμό)
+query_params = st.query_params
+if "incoming_chats" in query_params and not st.session_state.js_sync_done:
+    try:
+        st.session_state.all_chats = json.loads(query_params["incoming_chats"])
+        st.session_state.js_sync_done = True
+        # Αν υπάρχουν chats, επιλέγουμε το πρώτο διαθέσιμο
+        if st.session_state.all_chats.keys():
+            st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0]
+        st.rerun()
+    except:
+        pass
 
+def save_chats_to_browser():
+    """Συνάρτηση που στέλνει όλες τις συνομιλίες πίσω στο Local Storage του Browser"""
+    all_data_json = json.dumps(st.session_state.all_chats, ensure_ascii=False)
+    js_save = f"""
+    <script>
+        localStorage.setItem("strictex_multichats", JSON.stringify({all_data_json}));
+    </script>
+    """
+    components.html(js_save, height=0, width=0)
+
+# --- 3. WIKIPEDIA SEARCH FUNCTION ---
 def search_the_web(query, max_results=1):
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
     clean_query = query.lower()
@@ -74,10 +92,9 @@ def search_the_web(query, max_results=1):
                 results = search_res.get("query", {}).get("search", [])
                 
                 if results and len(results) > 0:
-                    exact_title = results[0]["title"]  # Σωστό index
+                    exact_title = results[0]["title"]
                     formatted_title = urllib.parse.quote_plus(exact_title)
                     
-                    # ΑΛΛΑΓΗ: Αφαιρέσαμε το exintro=1 για να πάρουμε όλο το κείμενο αν χρειαστεί
                     content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles={formatted_title}&format=json"
                     content_response = requests.get(content_url, headers=headers, timeout=4)
                     
@@ -88,218 +105,124 @@ def search_the_web(query, max_results=1):
                             extract = page_info.get("extract", "")
                             if extract.strip():
                                 wiki_link = f"https://{lang}.wikipedia.org/wiki/{formatted_title}"
-                                
-                                # ΕΞΥΠΝΟ ΦΙΛΤΡΟ: Αν είναι γενικό άρθρο, απομονώνει το σημείο που μας ενδιαφέρει
                                 if len(extract) > 2000 and clean_query in extract.lower():
                                     start_idx = extract.lower().find(clean_query)
-                                    # Παίρνει 1500 χαρακτήρες γύρω από τη λέξη-κλειδί
                                     extract = extract[max(0, start_idx-200):start_idx+1300]
-                                
                                 return f"• {exact_title} ({wiki_link}): {extract}"
     except:
         pass
     return None
 
-# --- 3. INITIALIZE SESSION STATE ---
-if "current_chat" not in st.session_state:
-    all_chats = get_all_chats()
-    if all_chats:
-        st.session_state.current_chat = all_chats
-    else:
-        st.session_state.current_chat = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
-
-if "messages" not in st.session_state:
-    st.session_state.messages = load_chat_history(st.session_state.current_chat)
-# --- 4. SIDEBAR GRAPHICS (TRANSLATED TO ENGLISH) ---
+# --- 4. SIDEBAR & CHAT SELECTOR ---
 with st.sidebar:
-    st.header("⚙ Settings & History")
+    st.header("💬 Οι Συνομιλίες μου")
     
-    selected_persona = st.selectbox(
-        "🎭 Select Personality:",
-        list(personalities.keys()),
-        key="persona_selector"
-    )
+    # Κουμπί για Δημιουργία Νέου Chat
+    if st.button("➕ Νέα Συνομιλία", use_container_width=True, type="primary"):
+        new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.session_state.all_chats[new_id] = {
+            "title": f"Συνομιλία {datetime.datetime.now().strftime('%d/%m %H:%M')}",
+            "messages": []
+        }
+        st.session_state.current_chat_id = new_id
+        save_chats_to_browser()
+        st.rerun()
+        
     st.divider()
     
-    all_chats = get_all_chats()
-    chat_ids = [c for c, ext in all_chats]
-    
-    if chat_ids:
-        if st.session_state.current_chat not in chat_ids:
-            st.session_state.current_chat = chat_ids[0]
-        
-        current_index = chat_ids.index(st.session_state.current_chat)
-        selected_chat = st.selectbox(
-            "💬 Select Chat:",
-            chat_ids,
-            index=current_index,
-            key="chat_selector"
+    # Λίστα Επιλογής Chat (Chat Selector)
+    if st.session_state.all_chats:
+        chat_options = {k: v["title"] for k, v in st.session_state.all_chats.items()}
+        selected_chat = st.radio(
+            "👉 Επιλέξτε συνομιλία:",
+            options=list(chat_options.keys()),
+            format_func=lambda x: chat_options[x]
         )
-        if selected_chat != st.session_state.current_chat:
-            st.session_state.current_chat = selected_chat
-            st.session_state.messages = load_chat_history(selected_chat)
+        if selected_chat != st.session_state.current_chat_id:
+            st.session_state.current_chat_id = selected_chat
             st.rerun()
-
-    if st.button("➕ New Chat", use_container_width=True):
-        new_id = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
-        st.session_state.current_chat = new_id
-        st.session_state.messages = []
-        save_chat_history(new_id, [])
-        st.rerun()
-
-# --- ΠΡΟΣΘΗΚΗ ΣΤΟ SIDEBAR ΓΙΑ ΑΠΟΘΗΚΕΥΣΗ CHAT ---
-with st.sidebar:
-    st.divider() # Μια οριζόντια γραμμή για διαχωρισμό
-    
-    # Το κουμπί εμφανίζεται μόνο αν η λίστα μηνυμάτων δεν είναι άδεια
-    if st.session_state.messages:
-        # Μετατροπή της λίστας των μηνυμάτων σε καθαρό κείμενο JSON (υποστήριξη Ελληνικών με ensure_ascii=False)
-        chat_json = json.dumps(st.session_state.messages, ensure_ascii=False, indent=4)
+            
+        st.divider()
         
-        # Δημιουργία δυναμικού ονόματος αρχείου με την τρέχουσα ημερομηνία και ώρα
-        file_timestamp = datetime.datetime.now().strftime("%d%m_%H%M%S")
-        
-        st.download_button(
-            label="📥 Save chat",
-            data=chat_json,
-            file_name=f"strictex_chat_{file_timestamp}.json",
-            mime="application/json",
-            use_container_width=True # Για να πιάνει όλο το πλάτος του Sidebar
-        )
+        # Κουμπί Διαγραφής του Επιλεγμένου Chat
+        if st.button("🗑 Διαγραφή τρέχουσας συνομιλίας", use_container_width=True):
+            del st.session_state.all_chats[st.session_state.current_chat_id]
+            st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
+            save_chats_to_browser()
+            st.rerun()
+    else:
+        st.info("Δεν υπάρχουν αποθηκευμένες συνομιλίες. Πατήστε 'Νέα Συνομιλία'.")
 
+    st.divider()
+    selected_persona = st.selectbox("🎭 Προσωπικότητα:", list(personalities.keys()))
 
-    if st.button("🗑 Delete Chat", use_container_width=True, type="primary"):
-        file_path = os.path.join(CHATS_DIR, f"{st.session_state.current_chat}.json")
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        remaining_chats = get_all_chats()
-        if remaining_chats:
-            st.session_state.current_chat = remaining_chats[0][0]
-            st.session_state.messages = load_chat_history(st.session_state.current_chat)
-        else:
-            new_id = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
-            st.session_state.current_chat = new_id
-            st.session_state.messages = []
-            save_chat_history(new_id, [])
+# --- 5. MAIN INTERFACE ---
+st.title("🤖 StrictexAI Hub")
 
-# --- 5. MAIN INTERFACE & CHAT DISPLAY ---
-st.title("🤖 StrictexAI ChatBot")
+if not st.session_state.current_chat_id:
+    st.warning("👈 Πατήστε στο κουμπί 'Νέα Συνομιλία' στο Sidebar για να ξεκινήσετε!")
+    st.stop()
 
-for msg in st.session_state.messages:
+# Φόρτωση των μηνυμάτων του επιλεγμένου Chat
+active_messages = st.session_state.all_chats[st.session_state.current_chat_id]["messages"]
+
+for msg in active_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# --- 6. INTELLIGENT ROUTING & RESPONSE ---
-if user_input := st.chat_input("Type your message here..."):
-    
+# --- 6. CHAT INPUT & PROCESSING ---
+if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
     with st.chat_message("user"):
         st.write(user_input)
-    st.session_state.messages.append({"role": "user", "content": user_input})
+        
+    # Προσθήκη μηνύματος και αυτόματη μετονομασία του τίτλου του Chat αν είναι το πρώτο μήνυμα
+    active_messages.append({"role": "user", "content": user_input})
+    if len(active_messages) == 1:
+        st.session_state.all_chats[st.session_state.current_chat_id]["title"] = user_input[:25] + "..."
+        
+    st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
+    save_chats_to_browser()
 
-    # Skip search logic for greetings
-    greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
-    clean_input = user_input. lower(). strip(). replace("?", ""). replace(".", "")
-    is_greeting = clean_input in greetings or len( clean_input. split()) <= 1
+    # (Η υπόλοιπη λογική αναζήτησης και Groq API παραμένει ίδια)
+    greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "hi", "hello"]
+    clean_input = user_input.lower().strip()
+    is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
-    # --- ΑΡΧΙΚΟΠΟΙΗΣΗ ΜΕΤΑΒΛΗΤΩΝ (DEFAULT VALUES) ---
     search_context = ""
     search_query = user_input
-
-    # Ανίχνευση γλώσσας για να επιβληθεί σωστή συμπεριφορά και στους χαιρετισμούς
     has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
-    if has_greek:
-        lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in Greek. You MUST write your ENTIRE response strictly in Greek."
-    else:
-        lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in English. You MUST write your ENTIRE response strictly in English."
+    lang_mirror_rule = "\n\n CRITICAL: Speak strictly in Greek." if has_greek else "\n\n CRITICAL: Speak strictly in English."
 
     if not is_greeting:
-        if len(st.session_state.messages) > 1:
-            rewriter_prompt = (
-                "You are a search query optimizer. The current year is 2026.\n"
-                "Your job is to convert the user's request into 2-4 English keywords for a search engine.\n"
-                "CRITICAL RULES:\n"
-                "- NEVER remove product generation numbers or model names (e.g., if user says 'iPhone 17' or 'iPhone 16 Pro Max', you MUST keep 'iPhone 17' or 'iPhone 16 Pro Max').\n"
-                "- Strip only conversational filler words (e.g., instead of 'tell me specs of iPhone 17 pro max', output 'iPhone 17 Pro Max specs').\n"
-                "- Keep tech queries in English keywords.\n"
-                "- Output ONLY the final keywords. No explanation, no quotes, no conversational text."
+        try:
+            rewrite_res = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
+                temperature=0.1
             )
+            search_query = rewrite_res.choices.message.content.strip()
+        except:
+            search_query = user_input
 
-            rewrite_messages = []
-            for msg in st.session_state.messages[-5:-1]:
-                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
-            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
-            try:
-                rewrite_res = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=rewrite_messages,
-                    temperature=0.2
-                )
-                search_query = rewrite_res.choices.message.content.strip()
-            except Exception:
-                search_query = user_input
+        with st.spinner("🔍 Αναζήτηση..."):
+            results = search_the_web(search_query)
 
-        # Live Web Search
-        with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
-            results = search_the_web(search_query, max_results=5)
-            
-            # Ανίχνευση γλώσσας του χρήστη
-            has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
-            
-            if results:
-                if has_greek:
-                    formatting_rules = (
-                        "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ:\n"
-                        "1. Γράψε την απάντησή σου ΑΠΟΚΛΕΙΣΤΙΚΑ στα Ελληνικά.\n"
-                        "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες.\n"
-                        "3. TIMELINE RULE: Καθώς βρισκόμαστε στον Μάιο του 2026, συσκευές όπως η σειρά Samsung Galaxy S26 έχουν ΉΔΗ κυκλοφορήσει στην αγορά (από τις αρχές του 2026). Μην αναφέρεσαι σε αυτές ως 'φήμες' ή 'μελλοντικά σχέδια', αλλά ως τρέχοντα, υπαρκτά προϊόντα με βάση τα live δεδομένα.\n"
-                    )
-                else:
-                    formatting_rules = (
-                        "👉 RESPONSE INSTRUCTIONS:\n"
-                        "1. Write your entire response STRICTLY in English.\n"
-                        "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories.\n"
-                        "3. TIMELINE RULE: Since we are in May 2026, devices like the Samsung Galaxy S26 series have ALREADY been officially released (early 2026). Do NOT refer to them as 'rumors' or 'speculation'. Treat them as current, active market products based on the web data.\n"
-                    )
-                search_context = f"\n\n[LIVE WEB DATA]:\n{results}\n\n{formatting_rules}"
+        if results:
+            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026. iPhone 17 series released late 2025. Treat as real product."
+        else:
+            search_context = "\n\n[SYSTEM NOTICE]: No results found."
 
-            else:
-                # --- ΕΞΥΠΝΟ FALLBACK ΑΝ ΑΠΟΤΥΧΟΥΝ ΟΛΕΣ ΟΙ ΑΝΑΖΗΤΗΣΕΙΣ ---
-                if has_greek:
-                    search_context = (
-                        "\n\n[SYSTEM NOTICE]: Η αναζήτηση στο διαδίκτυο δεν επέστρεψε αποτελέσματα. "
-                        "Γνωρίζεις ότι το τρέχον έτος είναι το 2026. Μην πεις ότι το προϊόν δεν υπάρχει ή ότι δεν έχεις πληροφορίες. "
-                        "Απάντησε στα Ελληνικά με βάση τις γνωστές προδιαγραφές, επίσημες κυκλοφορίες ή ευρέως γνωστές βιομηχανικές φήμες "
-                        "μέχρι σήμερα (π.χ. για τη σειρά iPhone 17 που κυκλοφόρησε στα τέλη του 2025, τον επεξεργαστή A19 Pro κλπ)."
-                    )
-                else:
-                    search_context = (
-                        "\n\n[SYSTEM NOTICE]: Web search returned no results. "
-                        "You know the current year is 2026. Do NOT say the product doesn't exist or that you lack info. "
-                        "Answer in English based on established specifications, official releases, or widely known industry rumors "
-                        "up to this point (e.g., regarding the iPhone 17 series released in late 2025, A19 Pro chip, etc.)."
-                    )
-
-    # Τελικό χτίσιμο του prompt
-    time_context = "\n\n[SYSTEM NOTE: The current year is 2026. Keep this timeline in mind for all release dates.]"
-    full_system_prompt = personalities[selected_persona] + time_context + search_context + lang_mirror_rule
-
+    full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
     api_messages = [{"role": "system", "content": full_system_prompt}]
-    api_messages.extend(st.session_state.messages[-12:])
+    api_messages.extend(active_messages[-10:])
 
-    # Final Chat Generation
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Σκέφτομαι..."):
             try:
                 chat_completion = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=api_messages,
                     temperature=0.3
                 )
-                assistant_response = chat_completion.choices[0].message.content
+                assistant_response = chat_completion.choices.message.content
                 st.write(assistant_response)
-                
-                # Save to state and directory
-                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
-                save_chat_history(st.session_state.current_chat, st.session_state.messages)
-            except Exception as e:
-                st.error(f"Error communicating with Groq: {e}")
