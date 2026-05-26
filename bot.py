@@ -172,7 +172,7 @@ with st.sidebar:
     st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
 
 # --- 5. MAIN INTERFACE ---
-st.title("🤖 StrictexAI Hub")
+st.title("🤖 StrictexAI Chatbot")
 
 if not st.session_state.current_chat_id:
     st.warning("👈 Tap on the 'New Chat button to start!'")
