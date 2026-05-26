@@ -1,49 +1,56 @@
 import streamlit as st
-import os
 import json
-from groq import Groq
-from duckduckgo_search import DDGS
+import os
+import datetime
 import requests
 import urllib.parse
-from gtts import gTTS
-import io
-from streamlit_mic_recorder import mic_recorder
+from groq import Groq
+from duckduckgo_search import DDGS
 
-# 1. Configuration & API Setup
-st.set_page_config(page_title="StrictexAI Chatbot", page_icon="🤖", layout="wide")
+# --- 1. PAGE CONFIGURATION ---
+st.set_page_config(page_title="StrictexAI v2", layout="wide", page_icon="🤖")
 
-# Initialize Groq Client
-if "GROQ_API_KEY" in st.secrets:
-    api_key = st.secrets["GROQ_API_KEY"]
-elif os.environ.get("GROQ_API_KEY"):
-    api_key = os.environ.get("GROQ_API_KEY")
-else:
-    api_key = "MOCK_KEY_FOR_LOCAL_DEV" # Fallback
-
-client = Groq(api_key=api_key)
-
-# 2. Local Chat Storage Configuration
+# Directory for saving chat history locally
 CHATS_DIR = "chats"
 if not os.path.exists(CHATS_DIR):
     os.makedirs(CHATS_DIR)
 
-def load_chat_history(title):
-    filepath = os.path.join(CHATS_DIR, f"{title}.json")
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
+# Check for API Key in Streamlit Secrets
+if "GROQ_API_KEY" not in st.secrets:
+    st.error("⚠ Please add your GROQ_API_KEY in Streamlit Secrets!")
+    st.stop()
+
+# Initialize Groq Client
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+# System Prompts / Personas
+personalities = {
+    "Friendly Assistant": "You are StrictexAI, a very friendly, polite, and helpful assistant.",
+    "Expert Programmer": "You are a top Senior Software Engineer. Provide highly accurate answers and clean code blocks.",
+    "Sarcastic Buddy": "You are a smart, ironic, and sarcastic friend. Use clever humor and light teasing.",
+    "Creative Storyteller": "You are an imaginative storyteller. Give a highly creative and engaging tone to your responses.",
+}
+
+# --- 2. HISTORY & SEARCH FUNCTIONS ---
+def get_all_chats():
+    if not os.path.exists(CHATS_DIR):
+        return []
+    files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
+    files.sort(key=lambda x: os.path.getmtime(os.path.join(CHATS_DIR, x)), reverse=True)
+    return [os.path.splitext(f) for f in files]
+
+def load_chat_history(chat_id):
+    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
-def save_chat_history(title, history):
-    filepath = os.path.join(CHATS_DIR, f"{title}.json")
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=4)
+def save_chat_history(chat_id, messages):
+    file_path = os.path.join(CHATS_DIR, f"{chat_id}.json")
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(messages, f, ensure_ascii=False, indent=4)
 
-def get_all_chats():
-    files = [f for f in os.listdir(CHATS_DIR) if f.endswith(".json")]
-    return [os.path.splitext(f)[0] for f in files]  # Κρατάει μόνο το όνομα ως string
-
-# 3. Core Functions: Live Search & Audio Processing
 def search_the_web(query, max_results=5):
     stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
     clean_query = query.lower()
@@ -62,13 +69,15 @@ def search_the_web(query, max_results=5):
 
     context_list = []
     
-    # DuckDuckGo Search with 1 Year time limit
+    # 1. Primary Live Web Search via DuckDuckGo
     try:
         with DDGS() as ddgs:
             results = ddgs.text(clean_query, max_results=max_results, timelimit='y')
+
             if results:
                 for item in results:
                     title = item.get("title", "")
+                    # ΕΛΕΓΧΟΣ ΓΙΑ ΟΛΑ ΤΑ ΠΙΘΑΝΑ ΚΛΕΙΔΙΑ ΤΟΥ DUCKDUCKGO API
                     snippet = item.get("body") or item.get("snippet") or item.get("text") or ""
                     link = item.get("href") or item.get("link") or ""
                     
@@ -82,7 +91,7 @@ def search_the_web(query, max_results=5):
     except Exception as e:
         st.sidebar.warning(f"⚠️ DuckDuckGo Search failed: {e}. Trying Wikipedia...")
 
-    # Wikipedia Fallback
+    # 2. Wikipedia Fallback Strategy
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
@@ -95,7 +104,8 @@ def search_the_web(query, max_results=5):
                 results = search_res.get("query", {}).get("search", [])
                 
                 if results and len(results) > 0:
-                    exact_title = results[0]["title"]  # Σωστός δείκτης λίστας
+                    # Σωστή λήψη του τίτλου από τη λίστα
+                    exact_title = results[0]["title"] 
                     formatted_title = urllib.parse.quote_plus(exact_title)
                     content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=0&explaintext=1&titles={formatted_title}&format=json"
                     
@@ -115,136 +125,97 @@ def search_the_web(query, max_results=5):
         
     return None
 
-def text_to_speech(text, lang_code="el"):
-    try:
-        clean_text = text.replace("**", "").replace("*", "").replace("-", "").strip()
-        tts = gTTS(text=clean_text, lang=lang_code, slow=False)
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        fp.seek(0)
-        return fp.read()
-    except Exception as e:
-        st.sidebar.error(f"❌ TTS Error: {e}")
-        return None
 
-# 4. Sidebar System & UI
-personalities = {
-    "Friendly Assistant": "You are a friendly, conversational, and highly helpful AI assistant. Respond warmly, build natural rapport, and match the user's conversational tone.",
-    "Expert Programmer": "You are an expert software engineer. Provide clean, highly optimized, and well-commented code. Always explain your logic clearly and concisely.",
-    "Sarcastic Buddy": "You are a witty, highly sarcastic, and playful friend. Mix humor, slight mockery, and banter into your answers while still being accurate and helpful.",
-    "Creative Storyteller": "You are an imaginative storyteller. Use rich vocabulary, dramatic pacing, and vivid descriptive imagery to craft captivating narratives.",
-    "Patient Teacher": "You are a patient educator. Explain concepts simply, step-by-step, using clear analogies, straightforward language, and helpful examples."
-}
+# --- 3. INITIALIZE SESSION STATE ---
+if "current_chat" not in st.session_state:
+    all_chats = get_all_chats()
+    if all_chats:
+        st.session_state.current_chat = all_chats
+    else:
+        st.session_state.current_chat = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
 
+if "messages" not in st.session_state:
+    st.session_state.messages = load_chat_history(st.session_state.current_chat)
+# --- 4. SIDEBAR GRAPHICS (TRANSLATED TO ENGLISH) ---
 with st.sidebar:
-    st.title("🤖 StrictexAI Control")
+    st.header("⚙ Settings & History")
     
-    selected_persona = st.selectbox("Επιλογή Προσωπικότητας Bot:", list(personalities.keys()))
-    
-    st.markdown("---")
-    st.subheader("🔊 Ρυθμίσεις Ήχου")
-    enable_tts = st.toggle("Ενεργοποίηση Φωνής Bot (TTS)", value=False)
-    
-    st.markdown("---")
-    st.subheader("📝 Διαχείριση Συνομιλιών")
-    
-    chat_names = get_all_chats()
-    
-    if "current_chat_title" not in st.session_state:
-        if "Default Chat" in chat_names:
-            st.session_state.current_chat_title = "Default Chat"
-        elif chat_names:
-            st.session_state.current_chat_title = chat_names[0]
-        else:
-            st.session_state.current_chat_title = "New Chat"
-
-    selectable_options = chat_names if chat_names else ["New Chat"]
-    if st.session_state.current_chat_title not in selectable_options:
-        st.session_state.current_chat_title = selectable_options[0]
-
-    selected_chat = st.selectbox(
-        "Επιλέξτε Συνομιλία:", 
-        selectable_options, 
-        index=selectable_options.index(st.session_state.current_chat_title) if st.session_state.current_chat_title in selectable_options else 0
+    selected_persona = st.selectbox(
+        "🎭 Select Personality:",
+        list(personalities.keys()),
+        key="persona_selector"
     )
+    st.divider()
     
-    if selected_chat != st.session_state.current_chat_title:
-        st.session_state.current_chat_title = selected_chat
-        st.session_state.messages = load_chat_history(selected_chat)
-        st.rerun()
-
-    new_chat_name = st.text_input("Όνομα Νέας Συνομιλίας:")
-    if st.button("➕ Δημιουργία Νέας"):
-        if new_chat_name.strip():
-            st.session_state.current_chat_title = new_chat_name.strip()
-            st.session_state.messages = []
-            save_chat_history(st.session_state.current_chat_title, [])
+    all_chats = get_all_chats()
+    chat_ids = [c for c, ext in all_chats]
+    
+    if chat_ids:
+        if st.session_state.current_chat not in chat_ids:
+            st.session_state.current_chat = chat_ids[0]
+        
+        current_index = chat_ids.index(st.session_state.current_chat)
+        selected_chat = st.selectbox(
+            "💬 Select Chat:",
+            chat_ids,
+            index=current_index,
+            key="chat_selector"
+        )
+        if selected_chat != st.session_state.current_chat:
+            st.session_state.current_chat = selected_chat
+            st.session_state.messages = load_chat_history(selected_chat)
             st.rerun()
 
-    if st.button("🗑️ Καθαρισμός Τρέχουσας"):
+    if st.button("➕ New Chat", use_container_width=True):
+        new_id = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
+        st.session_state.current_chat = new_id
         st.session_state.messages = []
-        save_chat_history(st.session_state.current_chat_title, [])
+        save_chat_history(new_id, [])
         st.rerun()
 
-    st.markdown("---")
-    st.write("🎙️ Μίλησε στο Bot:")
-    audio_rec = mic_recorder(
-        start_prompt="🔴 Έναρξη Εγγραφής",
-        stop_prompt="⏹️ Τέλος & Αποστολή",
-        just_once=True,
-        key="mic"
-    )
+    if st.button("🗑 Delete Chat", use_container_width=True, type="primary"):
+        file_path = os.path.join(CHATS_DIR, f"{st.session_state.current_chat}.json")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        remaining_chats = get_all_chats()
+        if remaining_chats:
+            st.session_state.current_chat = remaining_chats[0][0]
+            st.session_state.messages = load_chat_history(st.session_state.current_chat)
+        else:
+            new_id = f"Chat_{datetime.datetime.now().strftime('%d%m_%H%M%S')}"
+            st.session_state.current_chat = new_id
+            st.session_state.messages = []
+            save_chat_history(new_id, [])
 
-# 5. Core Chat Engine State Management
-if "messages" not in st.session_state:
-    st.session_state.messages = load_chat_history(st.session_state.current_chat_title)
+# --- 5. MAIN INTERFACE & CHAT DISPLAY ---
+st.title("🤖 StrictexAI ChatBot")
 
-# Display history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
-# Input Handling
-user_input = None
-
-if audio_rec and "bytes" in audio_rec:
-    with st.spinner("🎙️ Μετατροπή φωνής σε κείμενο..."):
-        try:
-            audio_file = ("audio.wav", audio_rec["bytes"], "audio/wav")
-            transcription = client.audio.transcriptions.create(
-                model="whisper-large-v3",
-                file=audio_file
-            )
-            if transcription.text.strip():
-                user_input = transcription.text.strip()
-        except Exception as e:
-            st.error(f"❌ Σφάλμα μικροφώνου: {e}")
-
-chat_prompt = st.chat_input("Γράψε ένα μήνυμα ή χρησιμοποίησε το μικρόφωνο...")
-if chat_prompt:
-    user_input = chat_prompt
-
-# 6. Response Execution Pipeline
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+# --- 6. INTELLIGENT ROUTING & RESPONSE ---
+if user_input := st.chat_input("Type your message here..."):
+    
     with st.chat_message("user"):
-        st.markdown(user_input)
+        st.write(user_input)
+    st.session_state.messages.append({"role": "user", "content": user_input})
 
+    # Skip search logic for greetings
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
-    clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
-    is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
+    clean_input = user_input. lower(). strip(). replace("?", ""). replace(".", "")
+    is_greeting = clean_input in greetings or len( clean_input. split()) <= 1
 
+    # --- ΑΡΧΙΚΟΠΟΙΗΣΗ ΜΕΤΑΒΛΗΤΩΝ (DEFAULT VALUES) ---
     search_context = ""
     search_query = user_input
 
+    # Ανίχνευση γλώσσας για να επιβληθεί σωστή συμπεριφορά και στους χαιρετισμούς
     has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
     if has_greek:
         lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in Greek. You MUST write your ENTIRE response strictly in Greek."
     else:
         lang_mirror_rule = "\n\nCRITICAL MANDATE: The user is speaking in English. You MUST write your ENTIRE response strictly in English."
-
-    time_context = "\n\n[SYSTEM NOTE: The current year is 2026. Keep this timeline in mind for all status and release updates.]"
-    full_system_prompt = personalities[selected_persona] + time_context + lang_mirror_rule
 
     if not is_greeting:
         if len(st.session_state.messages) > 1:
@@ -252,92 +223,88 @@ if user_input:
                 "You are a search query optimizer. The current year is 2026.\n"
                 "Your job is to convert the user's request into 2-4 English keywords for a search engine.\n"
                 "CRITICAL RULES:\n"
-                "- NEVER remove product generation numbers or model names (e.g., if user says 'iPhone 17', you MUST keep 'iPhone 17').\n"
-                "- Strip only conversational filler words.\n"
+                "- NEVER remove product generation numbers or model names (e.g., if user says 'iPhone 17' or 'iPhone 16 Pro Max', you MUST keep 'iPhone 17' or 'iPhone 16 Pro Max').\n"
+                "- Strip only conversational filler words (e.g., instead of 'tell me specs of iPhone 17 pro max', output 'iPhone 17 Pro Max specs').\n"
                 "- Keep tech queries in English keywords.\n"
                 "- Output ONLY the final keywords. No explanation, no quotes, no conversational text."
             )
+
+            rewrite_messages = []
+            for msg in st.session_state.messages[-5:-1]:
+                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
+            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
             try:
                 rewrite_res = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=rewrite_messages,
-                    temperature=0.0
+                    temperature=0.2
                 )
-                # ΔΙΟΡΘΩΣΗ: Πρόσβαση μέσω index [0] για ασφάλεια
-                search_query = rewrite_res.choices[0].message.content.strip()
-            except Exception:
-                search_query = user_input
-
                 search_query = rewrite_res.choices.message.content.strip()
             except Exception:
                 search_query = user_input
 
+        # Live Web Search
         with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
             results = search_the_web(search_query, max_results=5)
+            
+            # Ανίχνευση γλώσσας του χρήστη
+            has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
             
             if results:
                 if has_greek:
                     formatting_rules = (
                         "👉 ΟΔΗΓΙΑ ΓΙΑ ΤΗΝ ΑΠΑΝΤΗΣΗ:\n"
                         "1. Γράψε την απάντησή σου ΑΠΟΚΛΕΙΣΤΙΚΑ στα Ελληνικά.\n"
-                        "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points.\n"
-                        "3. TIMELINE RULE: Καθώς βρισκόμαστε στο 2026, συσκευές όπως η σειρά Samsung Galaxy S26 ή η σειρά iPhone 17 έχουν ΉΔΗ κυκλοφορήσει στην αγορά. Μην αναφέρεσαι σε αυτές ως 'φήμες', αλλά ως τρέχοντα προϊόντα.\n"
+                        "2. Οργάνωσε την απάντησή σου ΑΥΣΤΗΡΑ χρησιμοποιώντας έντονη γραφή (Bold) και Bullet Points στις κατάλληλες κατηγορίες.\n"
+                        "3. TIMELINE RULE: Καθώς βρισκόμαστε στον Μάιο του 2026, συσκευές όπως η σειρά Samsung Galaxy S26 έχουν ΉΔΗ κυκλοφορήσει στην αγορά (από τις αρχές του 2026). Μην αναφέρεσαι σε αυτές ως 'φήμες' ή 'μελλοντικά σχέδια', αλλά ως τρέχοντα, υπαρκτά προϊόντα με βάση τα live δεδομένα.\n"
                     )
                 else:
                     formatting_rules = (
                         "👉 RESPONSE INSTRUCTIONS:\n"
                         "1. Write your entire response STRICTLY in English.\n"
-                        "2. Organize your response STRICTLY using Bold text and Bullet Points.\n"
-                        "3. TIMELINE RULE: Since we are in 2026, devices like the Samsung Galaxy S26 series or iPhone 17 series have ALREADY been officially released. Do NOT refer to them as 'rumors'. Treat them as active market products.\n"
+                        "2. Organize your response STRICTLY using Bold text and Bullet Points in the appropriate categories.\n"
+                        "3. TIMELINE RULE: Since we are in May 2026, devices like the Samsung Galaxy S26 series have ALREADY been officially released (early 2026). Do NOT refer to them as 'rumors' or 'speculation'. Treat them as current, active market products based on the web data.\n"
                     )
                 search_context = f"\n\n[LIVE WEB DATA]:\n{results}\n\n{formatting_rules}"
+
             else:
+                # --- ΕΞΥΠΝΟ FALLBACK ΑΝ ΑΠΟΤΥΧΟΥΝ ΟΛΕΣ ΟΙ ΑΝΑΖΗΤΗΣΕΙΣ ---
                 if has_greek:
                     search_context = (
                         "\n\n[SYSTEM NOTICE]: Η αναζήτηση στο διαδίκτυο δεν επέστρεψε αποτελέσματα. "
-                        "Γνωρίζεις ότι το τρέχον έτος είναι το 2026. Μην πεις ότι το προϊόν δεν υπάρχει. "
-                        "Απάντησε στα Ελληνικά με βάση τις γνωστές προδιαγραφές ή επίσημες κυκλοφορίες μέχρι σήμερα."
+                        "Γνωρίζεις ότι το τρέχον έτος είναι το 2026. Μην πεις ότι το προϊόν δεν υπάρχει ή ότι δεν έχεις πληροφορίες. "
+                        "Απάντησε στα Ελληνικά με βάση τις γνωστές προδιαγραφές, επίσημες κυκλοφορίες ή ευρέως γνωστές βιομηχανικές φήμες "
+                        "μέχρι σήμερα (π.χ. για τη σειρά iPhone 17 που κυκλοφόρησε στα τέλη του 2025, τον επεξεργαστή A19 Pro κλπ)."
                     )
                 else:
                     search_context = (
                         "\n\n[SYSTEM NOTICE]: Web search returned no results. "
-                        "You know the current year is 2026. Do NOT say the product doesn't exist. "
-                        "Answer in English based on established specifications or official releases up to this point."
+                        "You know the current year is 2026. Do NOT say the product doesn't exist or that you lack info. "
+                        "Answer in English based on established specifications, official releases, or widely known industry rumors "
+                        "up to this point (e.g., regarding the iPhone 17 series released in late 2025, A19 Pro chip, etc.)."
                     )
-            
-            full_system_prompt = personalities[selected_persona] + time_context + search_context + lang_mirror_rule
 
-    # 7. Model Inference Setup & Processing
+    # Τελικό χτίσιμο του prompt
+    time_context = "\n\n[SYSTEM NOTE: The current year is 2026. Keep this timeline in mind for all release dates.]"
+    full_system_prompt = personalities[selected_persona] + time_context + search_context + lang_mirror_rule
+
     api_messages = [{"role": "system", "content": full_system_prompt}]
-    for msg in st.session_state.messages[-10:]:
-        api_messages.append({"role": msg["role"], "content": msg["content"]})
+    api_messages.extend(st.session_state.messages[-12:])
 
-    try:
-        with st.spinner("🤖 Thinking..."):
-            response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=api_messages,
-                temperature=0.3
-            )
-            # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] για να διαβαστεί σωστά το completion object
-            full_response = response.choices[0].message.content.strip()
-
-
-        with st.chat_message("assistant"):
-            st.markdown(full_response)
-            
-            if enable_tts:
-                response_has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in full_response)
-                audio_lang = "el" if response_has_greek else "en"
+    # Final Chat Generation
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                chat_completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=api_messages,
+                    temperature=0.3
+                )
+                assistant_response = chat_completion.choices[0].message.content
+                st.write(assistant_response)
                 
-                audio_bytes = text_to_speech(full_response, lang_code=audio_lang)
-                if audio_bytes:
-                    st.audio(audio_bytes, format="audio/mp3", autoplay = True)
-
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
-        chat_title = st.session_state.get("current_chat_title", "Untitled Chat")
-        save_chat_history(chat_title, st.session_state.messages)
-
-    except Exception as e:
-        st.error(f"❌ Error communicating with Groq: {e}")
-
+                # Save to state and directory
+                st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+                save_chat_history(st.session_state.current_chat, st.session_state.messages)
+            except Exception as e:
+                st.error(f"Error communicating with Groq: {e}")
