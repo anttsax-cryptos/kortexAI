@@ -18,9 +18,9 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 # Ενισχυμένα Prompts για μέγιστη ανάλυση και λεπτομέρεια
 personalities = {
     "Friendly Assistant": "You are StrictexAI, a highly detailed and comprehensive encyclopedia. Provide extensive, in-depth analysis, precise specifications, and complete technical overviews for every product or topic requested. Never summarize complex details.",
-    "Expert Programmer": "You are a top Senior Software Engineer. Provide exhaustive, highly accurate technical documentation, full code examples without omissions, and deep architectural explanations.",
-    "Sarcastic Buddy": "You are a highly analytical yet sarcastic expert. Give full, detailed specs and facts, but wrap them in clever, witty humor and light teasing.",
-    "Creative Storyteller": "You are an imaginative world-builder. Give rich, deeply descriptive, and expansive narratives filled with intricate details and vivid lore.",
+    "Expert Programmer": "You are StrictexAI, a top Senior Software Engineer. Provide exhaustive, highly accurate technical documentation, full code examples without omissions, and deep architectural explanations.",
+    "Sarcastic Buddy": "You are StrictexAI, a highly sarcastic expert. Don't hold back on anyone Make Everyone laugh and give them to understand who is the leader of the party.",
+    "Creative Storyteller": "You are StrictexAI, an imaginative world-builder. Give rich, deeply descriptive, and expansive narratives filled with intricate details and vivid lore.",
 }
 
 # --- 2. JAVASCRIPT MECHANISM FOR MULTIPLE CHATS (FIXED AUTO-JUMP) ---
@@ -82,7 +82,7 @@ def save_chats_to_browser():
 
 # --- 3. WIKIPEDIA SEARCH FUNCTION ---
 def search_the_web(query, max_results=1):
-    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για", "tell me about", "what is", "who is"]
+    stop_words = ["πες μου για το", "τι ειναι το", "ποιος ειναι ο", "υπαρχει το", "δειξε μου", "πληροφοριες για","information about","tell me about", "what is", "who is"]
     clean_query = query.lower()
     for word in stop_words:
         clean_query = clean_query.replace(word, "")
@@ -128,9 +128,9 @@ def search_the_web(query, max_results=1):
 # --- 4. SIDEBAR & CHAT SELECTOR ---
 with st.sidebar:
     st.caption("[Ai can make mistakes]")
-    st.header("💬 Οι Συνομιλίες μου")
+    st.header("💬 My chats")
     
-    if st.button("➕ Νέα Συνομιλία", use_container_width=True, type="primary"):
+    if st.button("➕ New chat", use_container_width=True, type="primary"):
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         st.session_state.all_chats[new_id] = {
             "title": f"Συνομιλία {datetime.datetime.now().strftime('%d/%m %H:%M')}",
@@ -147,7 +147,7 @@ with st.sidebar:
         
         # Radio Selector που παραμένει σταθερός στο current_chat_id
         selected_chat = st.radio(
-            "👉 Επιλέξτε συνομιλία:",
+            "👉 Choose chat:",
             options=list(chat_options.keys()),
             index=list(chat_options.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_options else 0,
             format_func=lambda x: chat_options[x]
@@ -159,23 +159,23 @@ with st.sidebar:
             
         st.divider()
         
-        if st.button("🗑 Διαγραφή τρέχουσας συνομιλίας", use_container_width=True):
+        if st.button("🗑 Delete this chat", use_container_width=True):
             del st.session_state.all_chats[st.session_state.current_chat_id]
             st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
             save_chats_to_browser()
             st.rerun()
     else:
-        st.info("Δεν υπάρχουν συνομιλίες. Πατήστε 'Νέα Συνομιλία'.")
+        st.info("There is not a chat, press 'New chat'.")
 
     st.divider()
-    selected_persona = st.selectbox("🎭 Προσωπικότητα:", list(personalities.keys()))
+    selected_persona = st.selectbox("🎭 Personality:", list(personalities.keys()))
     st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
 
 # --- 5. MAIN INTERFACE ---
 st.title("🤖 StrictexAI Hub")
 
 if not st.session_state.current_chat_id:
-    st.warning("👈 Πατήστε στο κουμπί 'Νέα Συνομιλία' στο Sidebar για να ξεκινήσετε!")
+    st.warning("👈 Tap on the 'New Chat button to start!'")
     st.stop()
 
 active_messages = st.session_state.all_chats[st.session_state.current_chat_id]["messages"]
@@ -185,7 +185,7 @@ for msg in active_messages:
         st.write(msg["content"])
 
 # --- 6. CHAT INPUT & PROCESSING ---
-if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
+if user_input := st.chat_input("Type your message..."):
     with st.chat_message("user"):
         st.write(user_input)
         
@@ -196,7 +196,7 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
     save_chats_to_browser()
 
-    greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις"]
+    greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you"]
     clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
