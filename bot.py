@@ -169,6 +169,7 @@ with st.sidebar:
 
     st.divider()
     selected_persona = st.selectbox("🎭 Προσωπικότητα:", list(personalities.keys()))
+    st.caption("[AI can make mistakes]")
 
 # --- 5. MAIN INTERFACE ---
 st.title("🤖 StrictexAI Hub")
