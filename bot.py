@@ -195,40 +195,37 @@ if user_input := st.chat_input("Type your message here..."):
 
     # Skip search logic for greetings
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "καληνυχτα", "hi", "hello", "hey", "τι κανεις", "πως εισαι", "how are you", "good morning"]
-    clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
-    is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
+    clean_input = user_input. lower(). strip(). replace("?", ""). replace(".", "")
+    is_greeting = clean_input in greetings or len( clean_input. split()) <= 1
 
+    # --- ΑΡΧΙΚΟΠΟΙΗΣΗ ΜΕΤΑΒΛΗΤΩΝ (DEFAULT VALUES) ---
     search_context = ""
+    lang_mirror_rule = ""
     search_query = user_input
 
     if not is_greeting:
-        if len(st.session_state.messages) > 1:
+        if len( st. session_state. messages) > 1:
             rewriter_prompt = (
                 "You are a search assistant. Based on the user's latest input and conversation history, "
                 "write a short, optimized search query (keywords) for DuckDuckGo or Wikipedia. "
                 "If the query is technical or about international products, prefer English keywords. "
                 "Respond STRICTLY with the keywords only, nothing else. Do not change the user's intent.\n\n"
-                f"User input: {user_input}"
+                f"User input: { user_input}"
             )
-            
             rewrite_messages = []
-            for msg in st.session_state.messages[-5:-1]:
-                rewrite_messages.append({"role": msg["role"], "content": msg["content"]})
-            rewrite_messages.append({"role": "user", "content": rewriter_prompt})
-            
+            for msg in st. session_state. messages[- 5:- 1]:
+                rewrite_messages. append({"role": msg["role"], "content": msg["content"]})
+            rewrite_messages. append({"role": "user", "content": rewriter_prompt})
             try:
-                rewrite_res = client.chat.completions.create(
+                rewrite_res = client. chat. completions. create(
                     model="llama-3.3-70b-versatile",
-                    messages=rewrite_messages,
-                    temperature=0.3
+                    messages= rewrite_messages,
+                    temperature= 0.0
                 )
-                search_query = rewrite_res.choices[0].message.content.strip()
+                search_query = rewrite_res. choices[ 0]. message. content. strip()
             except Exception:
                 search_query = user_input
 
-        # Live Web Search
-        with st.spinner(f"🔍 Searching the web for '{search_query}'..."):
-            results = search_the_web(search_query, max_results=5)
         # Live Web Search
         with st. spinner( f"🔍 Searching the web for '{ search_query}'..."):
             results = search_the_web( search_query, max_results= 5)
@@ -257,7 +254,7 @@ if user_input := st.chat_input("Type your message here..."):
                         "🧠 ΓΙΑ ΟΠΟΙΟΔΗΠΟΤΕ ΑΛΛΟ ΘΕΜΑ:\n"
                         "- **Ορισμός & Εισαγωγή** (Τι σημαίνει η έννοια με απλά λόγια)\n"
                         "- **Αναλυτική Ανάλυση** (Πώς λειτουργεί, ιστορικό υπόβαθρο, βασικές αρχές)\n"
-                        "- **Σημασία / Εφαρμογές** (Πού χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n"
+                        "- **Σημασία / Εφαρμογές** (Πώς χρησιμεύει, γιατί είναι σημαντικό σήμερα)\n"
                     )
                     lang_mirror_rule = "\n\nCRITICAL: The user wrote in Greek. Reply STRICTLY in Greek language."
                 else:
@@ -291,10 +288,9 @@ if user_input := st.chat_input("Type your message here..."):
                     "If any information is missing from the data, do not invent it, just report what is available."
                 )
 
-        # Final prompt preparation
-        full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
+    # Final prompt preparation (Εξασφαλίζει ότι υπάρχει πάντα τιμή, ακόμα και αν το search_context είναι κενό)
+    full_system_prompt = personalities[selected_persona] + search_context + lang_mirror_rule
 
-    
     api_messages = [{"role": "system", "content": full_system_prompt}]
     api_messages.extend(st.session_state.messages[-12:])
 
