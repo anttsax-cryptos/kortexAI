@@ -4,3 +4,5 @@ requests
 beautifulsoup4
 duckduckgo-search
 duckduckgo-search>=6.0.0
+streamlit-mic-recorder
+gTTS
