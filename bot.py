@@ -59,14 +59,18 @@ if "incoming_chats" in query_params and not st.session_state.js_sync_done:
         pass
 
 def save_chats_to_browser():
-    """Συνάρτηση που στέλνει όλες τις συνομιλίες πίσω στο Local Storage του Browser"""
+    """Συνάρτηση που αποθηκεύει άμεσα τα δεδομένα στον Browser χωρίς καθυστερήσεις"""
     all_data_json = json.dumps(st.session_state.all_chats, ensure_ascii=False)
-    js_save = f"""
-    <script>
-        localStorage.setItem("strictex_multichats", JSON.stringify({all_data_json}));
-    </script>
-    """
-    components.html(js_save, height=0, width=0)
+    # Χρήση session_state tag για να αναγκάσουμε το component να γίνει render αμέσως
+    st.components.v1.html(
+        f"""
+        <script>
+            localStorage.setItem("strictex_multichats", JSON.stringify({all_data_json}));
+        </script>
+        """,
+        height=0,
+        width=0
+    )
 
 # --- 3. WIKIPEDIA SEARCH FUNCTION ---
 def search_the_web(query, max_results=1):
@@ -175,15 +179,16 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
     with st.chat_message("user"):
         st.write(user_input)
         
-    # Προσθήκη μηνύματος και αυτόματη μετονομασία του τίτλου του Chat αν είναι το πρώτο μήνυμα
+    # Προσθήκη μηνύματος
     active_messages.append({"role": "user", "content": user_input})
     if len(active_messages) == 1:
         st.session_state.all_chats[st.session_state.current_chat_id]["title"] = user_input[:25] + "..."
         
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
+    
+    # 🚨 ΠΡΩΤΑ ΑΠΟΘΗΚΕΥΟΥΜΕ ΣΤΟΝ BROWSER
     save_chats_to_browser()
 
-    # (Η υπόλοιπη λογική αναζήτησης και Groq API παραμένει ίδια)
     greetings = ["γεια", "γεια σου", "γεια σας", "καλημερα", "καλησπερα", "hi", "hello"]
     clean_input = user_input.lower().strip()
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
@@ -226,3 +231,13 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 )
                 assistant_response = chat_completion.choices.message.content
                 st.write(assistant_response)
+                
+                # Αποθήκευση απάντησης assistant
+                active_messages.append({"role": "assistant", "content": assistant_response})
+                st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
+                
+                # 🚨 ΔΕΥΤΕΡΗ ΑΠΟΘΗΚΕΥΣΗ ΚΑΙ ΜΕΤΑ RERUN
+                save_chats_to_browser()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
