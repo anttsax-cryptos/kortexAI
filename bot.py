@@ -210,14 +210,14 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                 messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
                 temperature=0.1
             )
-            search_query = rewrite_res.choices.message.content.strip()
+            # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] εδώ
+            search_query = rewrite_res.choices[0].message.content.strip()
         except:
             search_query = user_input
 
         with st.spinner("🔍 Αναζήτηση..."):
             results = search_the_web(search_query)
 
-        # 🚨 ΟΙ ΟΔΗΓΙΕΣ ΜΠΑΙΝΟΥΝ ΜΟΝΟ ΑΝ ΔΕΝ ΕΙΝΑΙ ΧΑΙΡΕΤΙΣΜΟΣ
         detailed_instruction = (
             "\n👉 DETAILED SPECIFICATION MANDATE:\n"
             "- Provide an exhaustive and ultra-detailed answer. Include every single technical specification available (processor, screen technology, RAM, storage, camera sensors, charging speed, battery capacity, materials, and features).\n"
@@ -229,7 +229,6 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
         else:
             search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
     else:
-        # Αν είναι απλός χαιρετισμός, δίνουμε ένα πολύ απλό prompt για να απαντήσει φιλικά χωρίς specs
         search_context = "\n\n[SYSTEM NOTICE]: The user is just saying hello or greeting you. Respond with a short, polite, and friendly greeting in the same language. Do not output any technical specifications or bullet points."
 
     full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
@@ -244,7 +243,8 @@ if user_input := st.chat_input("Γράψτε το μήνυμά σας..."):
                     messages=api_messages,
                     temperature=0.3
                 )
-                assistant_response = chat_completion.choices.message.content
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] και εδώ για ασφάλεια
+                assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                 
                 active_messages.append({"role": "assistant", "content": assistant_response})
