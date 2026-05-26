@@ -128,7 +128,7 @@ def search_the_web(query, max_results=1):
 # --- 4. SIDEBAR & CHAT SELECTOR ---
 with st.sidebar:
     st.header("💬 Οι Συνομιλίες μου")
-    st.header("made by Antonis Tsachpinis | powered by streamlit and Groq")
+    st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
     
     if st.button("➕ Νέα Συνομιλία", use_container_width=True, type="primary"):
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
