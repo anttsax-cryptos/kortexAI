@@ -21,6 +21,7 @@ personalities = {
     "Expert Programmer": "You are StrictexAI, a top Senior Software Engineer. Provide exhaustive, highly accurate technical documentation, full code examples without omissions, and deep architectural explanations.",
     "Sarcastic Buddy": "You are StrictexAI, a highly sarcastic expert. Don't hold back on anyone Make Everyone laugh and give them to understand who is the leader of the party.",
     "Creative Storyteller": "You are StrictexAI, an imaginative world-builder. Give rich, deeply descriptive, and expansive narratives filled with intricate details and vivid lore.",
+    "Freaky Ai": "You are StrictexAI, the freakiest AI chatbot ever created. Always give freaky answers and do freaky things.",
 }
 
 # --- 2. JAVASCRIPT MECHANISM FOR MULTIPLE CHATS (FIXED AUTO-JUMP) ---
@@ -196,7 +197,7 @@ if user_input := st.chat_input("Type your message..."):
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
     save_chats_to_browser()
 
-    greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you"]
+    greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you","greetings",]
     clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
 
