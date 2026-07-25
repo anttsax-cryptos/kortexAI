@@ -175,7 +175,7 @@ with st.sidebar:
 st.title("🤖 StrictexAI Chatbot")
 
 if not st.session_state.current_chat_id:
-    st.warning("👈 Tap on the 'New Chat button to start!'")
+    st.warning("👈 Tap on the 'New Chat button on the sidebar to start!'")
     st.stop()
 
 active_messages = st.session_state.all_chats[st.session_state.current_chat_id]["messages"]
@@ -238,7 +238,7 @@ if user_input := st.chat_input("Type your message..."):
     api_messages.extend(active_messages[-10:])
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Σκέφτομαι..."):
             try:
                 chat_completion = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
@@ -246,11 +246,9 @@ if user_input := st.chat_input("Type your message..."):
                     temperature=0.3
                 )
                 # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] και εδώ για ασφάλεια
-                assistant_response = ollama.chat(
-    model="llama-3.1-8b-instant",
-    messages=messages,
-    options={"num_ctx": 16000} 
-)
+                assistant_response = chat_completion.choices[0].message.content
+                st.write(assistant_response)
+                
                 active_messages.append({"role": "assistant", "content": assistant_response})
                 st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
                 st.caption("[Ai can make mistakes]")
