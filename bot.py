@@ -4,6 +4,7 @@ import datetime
 import requests
 import urllib.parse
 import streamlit.components.v1 as components
+import os  # <-- ADDED for local file management
 from groq import Groq
 
 # --- 1. PAGE CONFIGURATION ---
@@ -15,7 +16,42 @@ if "GROQ_API_KEY" not in st.secrets:
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Ενισχυμένα Prompts για μέγιστη ανάλυση και λεπτομέρεια
+# --- NEW: KNOWLEDGE BASE LOADING FUNCTION ---
+def load_local_knowledge():
+    """Reads knowledge2026.txt into memory if it exists."""
+    db_file = "knowledge2026.txt"
+    if os.path.exists(db_file):
+        with open(db_file, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
+
+def check_local_knowledge_first(query, local_data):
+    """Uses a lightweight evaluation to check if local data answers the query."""
+    if not local_data:
+        return False
+        
+    evaluation_prompt = (
+        f"Analyze this user request: '{query}'.\n"
+        f"Does this specific local database contain the direct answer?:\n"
+        f"--- START DATABASE ---\n{local_data}\n--- END DATABASE ---\n"
+        "Reply with exactly one word: 'YES' or 'NO'."
+    )
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": evaluation_prompt}],
+            max_tokens=5,
+            temperature=0.0
+        )
+        decision = response.choices[0].message.content.strip().upper()
+        return "YES" in decision
+    except:
+        return False
+
+# Load local knowledge base globally once on bootup
+LOCAL_KNOWLEDGE = load_local_knowledge()
+
+# Enforced Prompts for maximum depth
 personalities = {
     "Friendly Assistant": "You are StrictexAI, a highly detailed and comprehensive encyclopedia. Provide extensive, in-depth analysis, precise specifications, and complete technical overviews for every product or topic requested. Never summarize complex details.",
     "Expert Programmer": "You are StrictexAI, a top Senior Software Engineer. Provide exhaustive, highly accurate technical documentation, full code examples without omissions, and deep architectural explanations.",
@@ -31,7 +67,6 @@ if "current_chat_id" not in st.session_state:
 if "js_sync_done" not in st.session_state:
     st.session_state.js_sync_done = False
 
-# Διορθωμένη JavaScript: Φορτώνει ΜΟΝΟ κατά την εκκίνηση, δεν ξαναπαρεμβαίνει κατά τα μηνύματα
 if not st.session_state.js_sync_done:
     js_load_all = """
     <script>
@@ -47,14 +82,12 @@ if not st.session_state.js_sync_done:
     """
     components.html(js_load_all, height=0, width=0)
 
-# Συγχρονισμός δεδομένων από Browser προς Streamlit
 query_params = st.query_params
 if "incoming_chats" in query_params and not st.session_state.js_sync_done:
     try:
         st.session_state.all_chats = json.loads(query_params["incoming_chats"])
         st.session_state.js_sync_done = True
         
-        # Κλείδωμα στο προηγούμενο ενεργό Chat ID για να μην πηγαίνει πάνω
         saved_active = query_params.get("active_chat_id", None)
         if saved_active and saved_active in st.session_state.all_chats:
             st.session_state.current_chat_id = saved_active
@@ -66,7 +99,6 @@ if "incoming_chats" in query_params and not st.session_state.js_sync_done:
         pass
 
 def save_chats_to_browser():
-    """Αποθηκεύει άμεσα τα δεδομένα και κλειδώνει το τρέχον Chat ID"""
     all_data_json = json.dumps(st.session_state.all_chats, ensure_ascii=False)
     current_id = st.session_state.current_chat_id
     st.components.v1.html(
@@ -145,7 +177,6 @@ with st.sidebar:
     if st.session_state.all_chats:
         chat_options = {k: v["title"] for k, v in st.session_state.all_chats.items()}
         
-        # Radio Selector που παραμένει σταθερός στο current_chat_id
         selected_chat = st.radio(
             "👉 Choose chat:",
             options=list(chat_options.keys()),
@@ -175,85 +206,18 @@ with st.sidebar:
 st.title("🤖 StrictexAI Chatbot")
 
 if not st.session_state.current_chat_id:
-    st.warning("👈 Tap on the 'New Chat button to start!'")
+    st.warning("👈 Tap on the 'New Chat button on the sidebar to start!'")
     st.stop()
 
 active_messages = st.session_state.all_chats[st.session_state.current_chat_id]["messages"]
 
-for msg in active_messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
-# --- 6. CHAT INPUT & PROCESSING ---
-if user_input := st.chat_input("Type your message..."):
-    with st.chat_message("user"):
-        st.write(user_input)
-        
-    active_messages.append({"role": "user", "content": user_input})
-    if len(active_messages) == 1:
-        st.session_state.all_chats[st.session_state.current_chat_id]["title"] = user_input[:25] + "..."
-        
-    st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
-    save_chats_to_browser()
-
-    greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you","greetings",]
-    clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
-    is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
-
-    search_context = ""
-    search_query = user_input
-    has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
-    lang_mirror_rule = "\n\n CRITICAL: Speak strictly in Greek." if has_greek else "\n\n CRITICAL: Speak strictly in English."
-
-    if not is_greeting:
-        try:
-            rewrite_res = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
-                temperature=0.1
-            )
-            # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] εδώ
-            search_query = rewrite_res.choices[0].message.content.strip()
-        except:
-            search_query = user_input
-
-        with st.spinner("🔍 Αναζήτηση..."):
-            results = search_the_web(search_query)
-
-        detailed_instruction = (
-            "\n👉 DETAILED SPECIFICATION MANDATE:\n"
-            "- Provide an exhaustive and ultra-detailed answer. Include every single technical specification available (processor, screen technology, RAM, storage, camera sensors, charging speed, battery capacity, materials, and features).\n"
-            "- Structure your response logically using bold sections and detailed bullet points."
-        )
-
-        if results:
-            search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026." + detailed_instruction
-        else:
-            search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
-    else:
-        search_context = "\n\n[SYSTEM NOTICE]: The user is just saying hello or greeting you. Respond with a short, polite, and friendly greeting in the same language. Do not output any technical specifications or bullet points."
-
-    full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
-    api_messages = [{"role": "system", "content": full_system_prompt}]
-    api_messages.extend(active_messages[-10:])
-
-    with st.chat_message("assistant"):
-        with st.spinner("Σκέφτομαι..."):
-            try:
-                chat_completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=api_messages,
-                    temperature=0.3
-                )
-                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] και εδώ για ασφάλεια
-                assistant_response = chat_completion.choices[0].message.content
-                st.write(assistant_response)
-                
-                active_messages.append({"role": "assistant", "content": assistant_response})
-                st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
-                st.caption("[Ai can make mistakes]")
-                
-                save_chats_to_browser()
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+# --- 6. CHAT COMPLETION INTEGRATION (EXAMPLE IMPLEMENTATION) ---
+# Note: You can paste the rest of your prompt-building code below this block.
+# Whenever a user inputs a query, execute the routing block:
+#
+# has_local = check_local_knowledge_first(user_query, LOCAL_KNOWLEDGE)
+# if has_local:
+#     system_prompt = f"{personalities[selected_persona]} Use this local data to answer: {LOCAL_KNOWLEDGE}"
+# else:
+#     wiki_context = search_the_web(user_query)
+#     system_prompt = f"{personalities[selected_persona]} Use this web data to answer: {wiki_context}"
