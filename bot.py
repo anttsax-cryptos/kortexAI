@@ -168,16 +168,36 @@ with st.sidebar:
     st.divider()
     selected_persona = st.selectbox("🎭 Personality:", list(personalities.keys()))
     
-    # ---------- IMAGE GENERATOR (only this new feature) ----------
+    # ---------- IMAGE GENERATOR + DOWNLOAD ----------
     st.divider()
     st.subheader("🎨 Image Generator")
     image_prompt = st.text_input("Describe the image:", placeholder="e.g. a futuristic robot in Athens")
+    
     if st.button("Generate Image", use_container_width=True) and image_prompt.strip():
         with st.spinner("Generating image..."):
             encoded_prompt = urllib.parse.quote(image_prompt.strip())
             image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-            st.image(image_url, caption=image_prompt, use_container_width=True)
-    # -------------------------------------------------------------
+            
+            try:
+                img_response = requests.get(image_url, timeout=40)
+                
+                if img_response.status_code == 200:
+                    # Show the image
+                    st.image(img_response.content, caption=image_prompt, use_container_width=True)
+                    
+                    # Download button
+                    st.download_button(
+                        label="⬇️ Download Image",
+                        data=img_response.content,
+                        file_name=f"strictex_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Failed to generate the image. Please try again.")
+            except Exception as e:
+                st.error(f"Error generating image: {e}")
+    # -------------------------------------------------
 
     st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
 
