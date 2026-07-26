@@ -273,7 +273,6 @@ if user_input := st.chat_input("Type your message..."):
                 messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
                 temperature=0.1
             )
-            # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] εδώ
             search_query = rewrite_res.choices[0].message.content.strip()
         except:
             search_query = user_input
@@ -287,4 +286,33 @@ if user_input := st.chat_input("Type your message..."):
         if results:
             search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026." + detailed_instruction
         else:
-            search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." +
+            search_context = (
+                "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. "
+                "Use your deep internal knowledge to provide an exhaustive, multi-paragraph "
+                "spec sheet for the requested current product. DO NOT say it doesn't exist."
+                + detailed_instruction
+            )
+    else:
+        search_context = "\n\n[SYSTEM NOTICE]: The user is just saying hello or greeting you. Respond with a short, polite, and friendly greeting in the same language. Do not output any technical specifications or bullet points."
+    full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
+    api_messages = [{"role": "system", "content": full_system_prompt}]
+    api_messages.extend(active_messages[-10:])
+    with st.chat_message("assistant"):
+        with st.spinner("Σκέφτομαι..."):
+            try:
+                chat_completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=api_messages,
+                    temperature=0.3
+                )
+                assistant_response = chat_completion.choices[0].message.content
+                st.write(assistant_response)
+               
+                active_messages.append({"role": "assistant", "content": assistant_response})
+                st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
+                st.caption("[Ai can make mistakes]")
+               
+                save_chats_to_browser()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
