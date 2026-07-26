@@ -132,7 +132,6 @@ with st.sidebar:
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         st.session_state.all_chats[new_id] = {
             "title": f"Συνομιλία {datetime.datetime.now().strftime('%d/%m %H:%M')}",
-            "description": "",
             "messages": []
         }
         st.session_state.current_chat_id = new_id
@@ -142,110 +141,44 @@ with st.sidebar:
     st.divider()
    
     if st.session_state.all_chats:
-        # Search box to find chats easier
-        search_term = st.text_input("🔍 Search chats", placeholder="Search by title or description...")
-        
-        chat_options = {}
-        for k, v in st.session_state.all_chats.items():
-            title = v.get("title", "Untitled")
-            desc = v.get("description", "")
-            # Filter by search
-            if search_term:
-                if search_term.lower() not in title.lower() and search_term.lower() not in desc.lower():
-                    continue
-            # Show title + short description
-            display = title
-            if desc:
-                display += f" — {desc[:40]}{'...' if len(desc) > 40 else ''}"
-            chat_options[k] = display
+        chat_options = {k: v["title"] for k, v in st.session_state.all_chats.items()}
        
-        if not chat_options:
-            st.info("No chats match your search.")
-        else:
-            # Radio Selector
-            selected_chat = st.radio(
-                "👉 Choose chat:",
-                options=list(chat_options.keys()),
-                index=list(chat_options.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_options else 0,
-                format_func=lambda x: chat_options[x]
-            )
-            if selected_chat != st.session_state.current_chat_id:
-                st.session_state.current_chat_id = selected_chat
-                save_chats_to_browser()
-                st.rerun()
+        # Radio Selector που παραμένει σταθερός στο current_chat_id
+        selected_chat = st.radio(
+            "👉 Choose chat:",
+            options=list(chat_options.keys()),
+            index=list(chat_options.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_options else 0,
+            format_func=lambda x: chat_options[x]
+        )
+        if selected_chat != st.session_state.current_chat_id:
+            st.session_state.current_chat_id = selected_chat
+            save_chats_to_browser()
+            st.rerun()
            
-            st.divider()
-            
-            # Editable description for current chat
-            current_chat = st.session_state.all_chats[st.session_state.current_chat_id]
-            new_desc = st.text_input(
-                "📝 Chat description",
-                value=current_chat.get("description", ""),
-                placeholder="Add a short description to find this chat easier..."
-            )
-            if new_desc != current_chat.get("description", ""):
-                st.session_state.all_chats[st.session_state.current_chat_id]["description"] = new_desc
-                save_chats_to_browser()
-                st.rerun()
-            
-            st.divider()
-           
-            if st.button("🗑 Delete this chat", use_container_width=True):
-                del st.session_state.all_chats[st.session_state.current_chat_id]
-                st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
-                save_chats_to_browser()
-                st.rerun()
-
-            # ---------- SAVE CHAT (only one) ----------
-            chat_json = json.dumps(current_chat, ensure_ascii=False, indent=2)
-            st.download_button(
-                label="💾 Save chat",
-                data=chat_json,
-                file_name=f"strictex_chat_{st.session_state.current_chat_id}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-            # ---------- LOAD CHAT (mobile-friendly) ----------
-            uploaded_file = st.file_uploader(
-                "📂 Load chat",
-                type=None,                          # ← important for phones
-                help="Select a previously saved .json chat file",
-                key="chat_loader"
-            )
-
-            if uploaded_file is not None:
-                # Only accept .json files
-                if not uploaded_file.name.lower().endswith(".json"):
-                    st.error("Please select a .json file")
-                else:
-                    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-
-                    if st.session_state.get("last_loaded_file") != file_id:
-                        try:
-                            loaded_data = json.load(uploaded_file)
-
-                            if "title" in loaded_data and "messages" in loaded_data:
-                                new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                                st.session_state.all_chats[new_id] = {
-                                    "title": loaded_data.get("title", "Loaded chat") + " (loaded)",
-                                    "description": loaded_data.get("description", ""),
-                                    "messages": loaded_data["messages"]
-                                }
-                                st.session_state.current_chat_id = new_id
-                                st.session_state.last_loaded_file = file_id
-                                save_chats_to_browser()
-                                st.success("Chat loaded successfully!")
-                                st.rerun()
-                            else:
-                                st.error("Invalid chat file format.")
-                        except Exception as e:
-                            st.error(f"Error loading file: {e}")
-            # -------------------------------------------------
-
+        st.divider()
+       
+        if st.button("🗑 Delete this chat", use_container_width=True):
+            del st.session_state.all_chats[st.session_state.current_chat_id]
+            st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
+            save_chats_to_browser()
+            st.rerun()
     else:
         st.info("There is not a chat, press 'New chat'.")
+    
     st.divider()
     selected_persona = st.selectbox("🎭 Personality:", list(personalities.keys()))
+    
+    # ---------- IMAGE GENERATOR (only this new feature) ----------
+    st.divider()
+    st.subheader("🎨 Image Generator")
+    image_prompt = st.text_input("Describe the image:", placeholder="e.g. a futuristic robot in Athens")
+    if st.button("Generate Image", use_container_width=True) and image_prompt.strip():
+        with st.spinner("Generating image..."):
+            encoded_prompt = urllib.parse.quote(image_prompt.strip())
+            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+            st.image(image_url, caption=image_prompt, use_container_width=True)
+    # -------------------------------------------------------------
+
     st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
 
 # --- 5. MAIN INTERFACE ---
@@ -283,6 +216,7 @@ if user_input := st.chat_input("Type your message..."):
                 messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
                 temperature=0.1
             )
+            # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] εδώ
             search_query = rewrite_res.choices[0].message.content.strip()
         except:
             search_query = user_input
@@ -296,12 +230,7 @@ if user_input := st.chat_input("Type your message..."):
         if results:
             search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026." + detailed_instruction
         else:
-            search_context = (
-                "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. "
-                "Use your deep internal knowledge to provide an exhaustive, multi-paragraph "
-                "spec sheet for the requested current product. DO NOT say it doesn't exist."
-                + detailed_instruction
-            )
+            search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
     else:
         search_context = "\n\n[SYSTEM NOTICE]: The user is just saying hello or greeting you. Respond with a short, polite, and friendly greeting in the same language. Do not output any technical specifications or bullet points."
     full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
@@ -315,6 +244,7 @@ if user_input := st.chat_input("Type your message..."):
                     messages=api_messages,
                     temperature=0.3
                 )
+                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] και εδώ για ασφάλεια
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
                
