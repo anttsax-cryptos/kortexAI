@@ -8,11 +8,9 @@ from groq import Groq
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(page_title="StrictexAI Ultra", layout="wide", page_icon="🤖")
-
 if "GROQ_API_KEY" not in st.secrets:
     st.error("⚠ Please add your GROQ_API_KEY in Streamlit Secrets!")
     st.stop()
-
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # Ενισχυμένα Prompts για μέγιστη ανάλυση και λεπτομέρεια
@@ -37,9 +35,9 @@ if not st.session_state.js_sync_done:
     <script>
         const savedData = localStorage.getItem("strictex_multichats");
         const currentActive = localStorage.getItem("strictex_active_chat_id");
-        
+       
         window.parent.postMessage({
-            type: "LOAD_ALL_CHATS", 
+            type: "LOAD_ALL_CHATS",
             data: savedData ? JSON.parse(savedData) : {},
             active_id: currentActive || null
         }, "*");
@@ -53,14 +51,14 @@ if "incoming_chats" in query_params and not st.session_state.js_sync_done:
     try:
         st.session_state.all_chats = json.loads(query_params["incoming_chats"])
         st.session_state.js_sync_done = True
-        
+       
         # Κλείδωμα στο προηγούμενο ενεργό Chat ID για να μην πηγαίνει πάνω
         saved_active = query_params.get("active_chat_id", None)
         if saved_active and saved_active in st.session_state.all_chats:
             st.session_state.current_chat_id = saved_active
         elif st.session_state.all_chats.keys():
             st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0]
-            
+           
         st.rerun()
     except:
         pass
@@ -87,29 +85,29 @@ def search_the_web(query, max_results=1):
     for word in stop_words:
         clean_query = clean_query.replace(word, "")
     clean_query = clean_query.strip()
-    
+   
     if not clean_query:
         return None
-        
+       
     try:
         headers = {"User-Agent": "StrictexAIChatbot/2.0 (contact@example.com)"}
         formatted_query = urllib.parse.quote_plus(clean_query)
-        
+       
         for lang in ["el", "en"]:
             search_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&list=search&srsearch={formatted_query}&srlimit=1&format=json"
             response = requests.get(search_url, headers=headers, timeout=4)
-            
+           
             if response.status_code == 200 and response.text.strip():
                 search_res = response.json()
                 results = search_res.get("query", {}).get("search", [])
-                
+               
                 if results and len(results) > 0:
                     exact_title = results[0]["title"]
                     formatted_title = urllib.parse.quote_plus(exact_title)
-                    
+                   
                     content_url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&titles={formatted_title}&format=json"
                     content_response = requests.get(content_url, headers=headers, timeout=4)
-                    
+                   
                     if content_response.status_code == 200 and content_response.text.strip():
                         content_res = content_response.json()
                         pages = content_res.get("query", {}).get("pages", {})
@@ -129,22 +127,22 @@ def search_the_web(query, max_results=1):
 with st.sidebar:
     st.caption("[Ai can make mistakes]")
     st.header("💬 My chats")
-    
+   
     if st.button("➕ New chat", use_container_width=True, type="primary"):
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         st.session_state.all_chats[new_id] = {
-            "title": f"Συνομιλία {datetime.datetime.now().strftime('%d/%m %H:%M')}",
+            "title": f"Chat {datetime.datetime.now().strftime('%d/%m %H:%M')}",
             "messages": []
         }
         st.session_state.current_chat_id = new_id
         save_chats_to_browser()
         st.rerun()
-        
+       
     st.divider()
-    
+   
     if st.session_state.all_chats:
         chat_options = {k: v["title"] for k, v in st.session_state.all_chats.items()}
-        
+       
         # Radio Selector που παραμένει σταθερός στο current_chat_id
         selected_chat = st.radio(
             "👉 Choose chat:",
@@ -156,30 +154,41 @@ with st.sidebar:
             st.session_state.current_chat_id = selected_chat
             save_chats_to_browser()
             st.rerun()
-            
+           
         st.divider()
-        
+       
         if st.button("🗑 Delete this chat", use_container_width=True):
             del st.session_state.all_chats[st.session_state.current_chat_id]
             st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
             save_chats_to_browser()
             st.rerun()
+
+        # ---------- ONLY ONE SAVE CHAT BUTTON ----------
+        if st.session_state.current_chat_id and st.session_state.current_chat_id in st.session_state.all_chats:
+            current_chat = st.session_state.all_chats[st.session_state.current_chat_id]
+            chat_json = json.dumps(current_chat, ensure_ascii=False, indent=2)
+            
+            st.download_button(
+                label="💾 Save chat",
+                data=chat_json,
+                file_name=f"strictex_chat_{st.session_state.current_chat_id}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        # -----------------------------------------------
+
     else:
         st.info("There is not a chat, press 'New chat'.")
-
     st.divider()
     selected_persona = st.selectbox("🎭 Personality:", list(personalities.keys()))
     st.caption("made by Antonis Tsachpinis | powered by streamlit and Groq")
 
 # --- 5. MAIN INTERFACE ---
 st.title("🤖 StrictexAI Chatbot")
-
 if not st.session_state.current_chat_id:
     st.warning("👈 Tap on the 'New Chat button on the sidebar to start!'")
     st.stop()
-
 active_messages = st.session_state.all_chats[st.session_state.current_chat_id]["messages"]
-
 for msg in active_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
@@ -188,23 +197,20 @@ for msg in active_messages:
 if user_input := st.chat_input("Type your message..."):
     with st.chat_message("user"):
         st.write(user_input)
-        
+       
     active_messages.append({"role": "user", "content": user_input})
     if len(active_messages) == 1:
         st.session_state.all_chats[st.session_state.current_chat_id]["title"] = user_input[:25] + "..."
-        
+       
     st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
     save_chats_to_browser()
-
     greetings = ["γεια","πως τα πας","γεια σου","wat's up","γεια σας", "καλημερα", "καλησπερα", "hi", "hello", "hey", "τι κανεις","good morning","how are you","greetings",]
     clean_input = user_input.lower().strip().replace("?", "").replace(".", "")
     is_greeting = clean_input in greetings or len(clean_input.split()) <= 1
-
     search_context = ""
     search_query = user_input
     has_greek = any('α' <= char <= 'ώ' or 'Α' <= char <= 'Ω' for char in user_input)
     lang_mirror_rule = "\n\n CRITICAL: Speak strictly in Greek." if has_greek else "\n\n CRITICAL: Speak strictly in English."
-
     if not is_greeting:
         try:
             rewrite_res = client.chat.completions.create(
@@ -216,27 +222,22 @@ if user_input := st.chat_input("Type your message..."):
             search_query = rewrite_res.choices[0].message.content.strip()
         except:
             search_query = user_input
-
         with st.spinner("🔍 Αναζήτηση..."):
             results = search_the_web(search_query)
-
         detailed_instruction = (
             "\n👉 DETAILED SPECIFICATION MANDATE:\n"
             "- Provide an exhaustive and ultra-detailed answer. Include every single technical specification available (processor, screen technology, RAM, storage, camera sensors, charging speed, battery capacity, materials, and features).\n"
             "- Structure your response logically using bold sections and detailed bullet points."
         )
-
         if results:
             search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026." + detailed_instruction
         else:
             search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
     else:
         search_context = "\n\n[SYSTEM NOTICE]: The user is just saying hello or greeting you. Respond with a short, polite, and friendly greeting in the same language. Do not output any technical specifications or bullet points."
-
     full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
     api_messages = [{"role": "system", "content": full_system_prompt}]
     api_messages.extend(active_messages[-10:])
-
     with st.chat_message("assistant"):
         with st.spinner("Σκέφτομαι..."):
             try:
@@ -248,11 +249,11 @@ if user_input := st.chat_input("Type your message..."):
                 # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] και εδώ για ασφάλεια
                 assistant_response = chat_completion.choices[0].message.content
                 st.write(assistant_response)
-                
+               
                 active_messages.append({"role": "assistant", "content": assistant_response})
                 st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
                 st.caption("[Ai can make mistakes]")
-                
+               
                 save_chats_to_browser()
                 st.rerun()
             except Exception as e:
