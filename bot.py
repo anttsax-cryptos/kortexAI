@@ -131,7 +131,8 @@ with st.sidebar:
     if st.button("➕ New chat", use_container_width=True, type="primary"):
         new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         st.session_state.all_chats[new_id] = {
-            "title": f"Chat {datetime.datetime.now().strftime('%d/%m %H:%M')}",
+            "title": f"Συνομιλία {datetime.datetime.now().strftime('%d/%m %H:%M')}",
+            "description": "",
             "messages": []
         }
         st.session_state.current_chat_id = new_id
@@ -141,33 +142,62 @@ with st.sidebar:
     st.divider()
    
     if st.session_state.all_chats:
-        chat_options = {k: v["title"] for k, v in st.session_state.all_chats.items()}
+        # Search box to find chats easier
+        search_term = st.text_input("🔍 Search chats", placeholder="Search by title or description...")
+        
+        chat_options = {}
+        for k, v in st.session_state.all_chats.items():
+            title = v.get("title", "Untitled")
+            desc = v.get("description", "")
+            # Filter by search
+            if search_term:
+                if search_term.lower() not in title.lower() and search_term.lower() not in desc.lower():
+                    continue
+            # Show title + short description
+            display = title
+            if desc:
+                display += f" — {desc[:40]}{'...' if len(desc) > 40 else ''}"
+            chat_options[k] = display
        
-        # Radio Selector που παραμένει σταθερός στο current_chat_id
-        selected_chat = st.radio(
-            "👉 Choose chat:",
-            options=list(chat_options.keys()),
-            index=list(chat_options.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_options else 0,
-            format_func=lambda x: chat_options[x]
-        )
-        if selected_chat != st.session_state.current_chat_id:
-            st.session_state.current_chat_id = selected_chat
-            save_chats_to_browser()
-            st.rerun()
+        if not chat_options:
+            st.info("No chats match your search.")
+        else:
+            # Radio Selector
+            selected_chat = st.radio(
+                "👉 Choose chat:",
+                options=list(chat_options.keys()),
+                index=list(chat_options.keys()).index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_options else 0,
+                format_func=lambda x: chat_options[x]
+            )
+            if selected_chat != st.session_state.current_chat_id:
+                st.session_state.current_chat_id = selected_chat
+                save_chats_to_browser()
+                st.rerun()
            
-        st.divider()
-       
-        if st.button("🗑 Delete this chat", use_container_width=True):
-            del st.session_state.all_chats[st.session_state.current_chat_id]
-            st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
-            save_chats_to_browser()
-            st.rerun()
-
-        # ---------- ONLY ONE SAVE CHAT BUTTON ----------
-        if st.session_state.current_chat_id and st.session_state.current_chat_id in st.session_state.all_chats:
-            current_chat = st.session_state.all_chats[st.session_state.current_chat_id]
-            chat_json = json.dumps(current_chat, ensure_ascii=False, indent=2)
+            st.divider()
             
+            # Editable description for current chat
+            current_chat = st.session_state.all_chats[st.session_state.current_chat_id]
+            new_desc = st.text_input(
+                "📝 Chat description",
+                value=current_chat.get("description", ""),
+                placeholder="Add a short description to find this chat easier..."
+            )
+            if new_desc != current_chat.get("description", ""):
+                st.session_state.all_chats[st.session_state.current_chat_id]["description"] = new_desc
+                save_chats_to_browser()
+                st.rerun()
+            
+            st.divider()
+           
+            if st.button("🗑 Delete this chat", use_container_width=True):
+                del st.session_state.all_chats[st.session_state.current_chat_id]
+                st.session_state.current_chat_id = list(st.session_state.all_chats.keys())[0] if st.session_state.all_chats else None
+                save_chats_to_browser()
+                st.rerun()
+
+            # ---------- SAVE CHAT (only one) ----------
+            chat_json = json.dumps(current_chat, ensure_ascii=False, indent=2)
             st.download_button(
                 label="💾 Save chat",
                 data=chat_json,
@@ -175,7 +205,32 @@ with st.sidebar:
                 mime="application/json",
                 use_container_width=True
             )
-        # -----------------------------------------------
+
+            # ---------- LOAD CHAT ----------
+            uploaded_file = st.file_uploader(
+                "📂 Load chat",
+                type=["json"],
+                help="Select a previously saved .json chat file"
+            )
+            if uploaded_file is not None:
+                try:
+                    loaded_data = json.load(uploaded_file)
+                    if "title" in loaded_data and "messages" in loaded_data:
+                        new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        st.session_state.all_chats[new_id] = {
+                            "title": loaded_data.get("title", "Loaded chat") + " (loaded)",
+                            "description": loaded_data.get("description", ""),
+                            "messages": loaded_data["messages"]
+                        }
+                        st.session_state.current_chat_id = new_id
+                        save_chats_to_browser()
+                        st.success("Chat loaded successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Invalid chat file format.")
+                except Exception as e:
+                    st.error(f"Error loading file: {e}")
+            # --------------------------------
 
     else:
         st.info("There is not a chat, press 'New chat'.")
@@ -232,29 +287,4 @@ if user_input := st.chat_input("Type your message..."):
         if results:
             search_context = f"\n\n[LIVE DATA]:\n{results}\n\n- TIMELINE: Year 2026." + detailed_instruction
         else:
-            search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." + detailed_instruction
-    else:
-        search_context = "\n\n[SYSTEM NOTICE]: The user is just saying hello or greeting you. Respond with a short, polite, and friendly greeting in the same language. Do not output any technical specifications or bullet points."
-    full_system_prompt = personalities[selected_persona] + "\n[SYSTEM: Year is 2026]" + search_context + lang_mirror_rule
-    api_messages = [{"role": "system", "content": full_system_prompt}]
-    api_messages.extend(active_messages[-10:])
-    with st.chat_message("assistant"):
-        with st.spinner("Σκέφτομαι..."):
-            try:
-                chat_completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=api_messages,
-                    temperature=0.3
-                )
-                # ΔΙΟΡΘΩΣΗ: Προσθήκη του [0] και εδώ για ασφάλεια
-                assistant_response = chat_completion.choices[0].message.content
-                st.write(assistant_response)
-               
-                active_messages.append({"role": "assistant", "content": assistant_response})
-                st.session_state.all_chats[st.session_state.current_chat_id]["messages"] = active_messages
-                st.caption("[Ai can make mistakes]")
-               
-                save_chats_to_browser()
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+            search_context = "\n\n[SYSTEM FALLBACK]: Web search unavailable. You are in 2026. Use your deep internal knowledge to provide an exhaustive, multi-paragraph spec sheet for the requested current product. DO NOT say it doesn't exist." +
