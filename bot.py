@@ -205,39 +205,42 @@ with st.sidebar:
                 mime="application/json",
                 use_container_width=True
             )
-            # ---------- LOAD CHAT (fixed - no more spam) ----------
+            # ---------- LOAD CHAT (mobile-friendly) ----------
             uploaded_file = st.file_uploader(
                 "📂 Load chat",
-                type=["json"],
+                type=None,                          # ← important for phones
                 help="Select a previously saved .json chat file",
                 key="chat_loader"
             )
 
             if uploaded_file is not None:
-                # Create a unique ID for this specific file so we don't re-process it
-                file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+                # Only accept .json files
+                if not uploaded_file.name.lower().endswith(".json"):
+                    st.error("Please select a .json file")
+                else:
+                    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
 
-                if st.session_state.get("last_loaded_file") != file_id:
-                    try:
-                        loaded_data = json.load(uploaded_file)
+                    if st.session_state.get("last_loaded_file") != file_id:
+                        try:
+                            loaded_data = json.load(uploaded_file)
 
-                        if "title" in loaded_data and "messages" in loaded_data:
-                            new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                            st.session_state.all_chats[new_id] = {
-                                "title": loaded_data.get("title", "Loaded chat") + " (loaded)",
-                                "description": loaded_data.get("description", ""),
-                                "messages": loaded_data["messages"]
-                            }
-                            st.session_state.current_chat_id = new_id
-                            st.session_state.last_loaded_file = file_id   # mark as processed
-                            save_chats_to_browser()
-                            st.success("Chat loaded successfully!")
-                            st.rerun()
-                        else:
-                            st.error("Invalid chat file format.")
-                    except Exception as e:
-                        st.error(f"Error loading file: {e}")
-            # ------------------------------------------------------
+                            if "title" in loaded_data and "messages" in loaded_data:
+                                new_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                                st.session_state.all_chats[new_id] = {
+                                    "title": loaded_data.get("title", "Loaded chat") + " (loaded)",
+                                    "description": loaded_data.get("description", ""),
+                                    "messages": loaded_data["messages"]
+                                }
+                                st.session_state.current_chat_id = new_id
+                                st.session_state.last_loaded_file = file_id
+                                save_chats_to_browser()
+                                st.success("Chat loaded successfully!")
+                                st.rerun()
+                            else:
+                                st.error("Invalid chat file format.")
+                        except Exception as e:
+                            st.error(f"Error loading file: {e}")
+            # -------------------------------------------------
 
     else:
         st.info("There is not a chat, press 'New chat'.")
