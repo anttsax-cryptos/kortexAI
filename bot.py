@@ -232,7 +232,7 @@ if user_input := st.chat_input("Type your message..."):
     if not is_greeting:
         try:
             rewrite_res = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="GPT OSS 20B",
                 messages=[{"role": "user", "content": f"Convert to 2-4 keywords for Wikipedia: {user_input}"}],
                 temperature=0.1
             )
@@ -260,7 +260,7 @@ if user_input := st.chat_input("Type your message..."):
         with st.spinner("Σκέφτομαι..."):
             try:
                 chat_completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="GPT OSS 20B",
                     messages=api_messages,
                     temperature=0.3
                 )
